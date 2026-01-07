@@ -25,7 +25,7 @@ class AdaptiveIntroSkip(_PluginBase):
     # 插件版本
     plugin_version = "1.7.8"
     # 插件作者
-    plugin_author = "ccwssy"
+    plugin_author = "honue"
     # 作者主页
     author_url = "https://github.com/ccwssy"
     # 插件配置项ID前缀
