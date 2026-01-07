@@ -11,8 +11,8 @@
       "v1.5": "时间支持 分:秒 格式",
       "v1.4": "增加用户事件筛选"
     },
-    "icon": "https://raw.githubusercontent.com/honue/MoviePilot-Plugins/main/icons/chapter.png",
-    "author": "honue",
+    "icon": "https://raw.githubusercontent.com/ccwssy/MoviePilot-Plugins/main/icons/chapter.png",
+    "author": "ccwssy",
     "level": 1
 
     }
