@@ -2,7 +2,7 @@
   "AdaptiveIntroSkip": {
     "name": "自适应IntroSkip",
     "description": "通过用户的暂停与播放动作，批量标记片头片尾",
-    "version": "1.7.7",
+    "version": "1.7.8",
     "v2": true,
     "history": {
       "v1.7.8": "fix: 适配新版MP,原修复者：srlihg66",
@@ -12,7 +12,7 @@
       "v1.4": "增加用户事件筛选"
     },
     "icon": "https://raw.githubusercontent.com/honue/MoviePilot-Plugins/main/icons/chapter.png",
-    "author": "honue",
+    "author": "ccwssy",
     "level": 1
-  },
+  }
 }
