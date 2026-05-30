@@ -26,7 +26,7 @@ class StrmLinkChecker(_PluginBase):
     plugin_name = "STRM源链接检查"
     plugin_desc = "通过转移记录对比Emby媒体库STRM文件与源STRM文件，如果源文件已删除，同步清理Emby条目及附属文件。"
     plugin_icon = "strmcheck.png"
-    plugin_version = "1.0.2"
+    plugin_version = "1.0.3"
     plugin_author = "ccwssy"
     author_url = "https://github.com/ccwssy/MoviePilot-Plugins"
     plugin_config_prefix = "strmlinkchecker_"
@@ -43,7 +43,6 @@ class StrmLinkChecker(_PluginBase):
     _delete_strm = False
     _delete_sidecar = False
     _delete_history = False
-    _request_timeout = 10
     _emby_host = None
     _emby_apikey = None
     _running = False
@@ -64,7 +63,6 @@ class StrmLinkChecker(_PluginBase):
             self._delete_strm = config.get("delete_strm", False)
             self._delete_sidecar = config.get("delete_sidecar", False)
             self._delete_history = config.get("delete_history", False)
-            self._request_timeout = config.get("request_timeout", 10)
             self._emby_host = config.get("emby_host")
             self._emby_apikey = config.get("emby_apikey")
 
@@ -88,7 +86,6 @@ class StrmLinkChecker(_PluginBase):
                     "delete_strm": self._delete_strm,
                     "delete_sidecar": self._delete_sidecar,
                     "delete_history": self._delete_history,
-                    "request_timeout": self._request_timeout,
                     "emby_host": self._emby_host,
                     "emby_apikey": self._emby_apikey,
                 })
@@ -242,9 +239,9 @@ class StrmLinkChecker(_PluginBase):
                                     {
                                         'component': 'VTextField',
                                         'props': {
-                                            'model': 'request_timeout',
-                                            'label': '请求超时(秒)',
-                                            'placeholder': '10'
+                                            'model': 'cron',
+                                            'label': '执行周期(cron)',
+                                            'placeholder': '5位cron表达式，如 0 6 * * *'
                                         }
                                     }
                                 ]
@@ -357,7 +354,6 @@ class StrmLinkChecker(_PluginBase):
             "delete_strm": False,
             "delete_sidecar": False,
             "delete_history": False,
-            "request_timeout": 10,
             "emby_host": "",
             "emby_apikey": "",
         }
