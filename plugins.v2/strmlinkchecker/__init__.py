@@ -26,7 +26,7 @@ class StrmLinkChecker(_PluginBase):
     plugin_name = "STRM源链接检查"
     plugin_desc = "通过转移记录对比Emby媒体库STRM文件与源STRM文件，如果源文件已删除，同步清理Emby条目及附属文件。"
     plugin_icon = "strmcheck.png"
-    plugin_version = "1.0.1"
+    plugin_version = "1.0.2"
     plugin_author = "ccwssy"
     author_url = "https://github.com/ccwssy/MoviePilot-Plugins"
     plugin_config_prefix = "strmlinkchecker_"
@@ -263,8 +263,8 @@ class StrmLinkChecker(_PluginBase):
                                         'props': {
                                             'model': 'strm_path',
                                             'rows': '2',
-                                            'label': 'Emby媒体库STRM目录路径',
-                                            'placeholder': 'MP2入库后的STRM文件所在目录，如 /clouddata/movies/云盘（一行一个目录）'
+                                            'label': 'MP2入库后的STRM目录路径',
+                                            'placeholder': 'MP2容器内看到的入库STRM文件目录，如 /clouddata/movies/云盘（一行一个目录）'
                                         }
                                     }
                                 ]
@@ -316,7 +316,7 @@ class StrmLinkChecker(_PluginBase):
                                         'props': {
                                             'type': 'info',
                                             'variant': 'tonal',
-                                            'text': '插件会扫描Emby媒体库中的STRM文件，通过转移记录查找对应的源STRM文件路径。'
+                                            'text': '插件会扫描MP2入库后的STRM文件，通过转移记录查找对应的源STRM文件路径。'
                                                     '如果源STRM文件在磁盘上已不存在，说明源文件已被删除，'
                                                     '将通过Emby API删除该STRM文件对应的条目及附属文件。'
                                                     '如果Emby地址和API Key留空，将使用系统配置的媒体服务器。'
