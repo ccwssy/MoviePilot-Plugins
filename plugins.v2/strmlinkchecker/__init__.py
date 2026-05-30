@@ -40,6 +40,7 @@ class StrmLinkChecker(_PluginBase):
     _onlyonce = False
     _notify = False
     _strm_path = None
+    _source_strm_path = None
     _delete_strm = False
     _delete_sidecar = False
     _delete_history = False
@@ -61,6 +62,7 @@ class StrmLinkChecker(_PluginBase):
             self._onlyonce = config.get("onlyonce")
             self._notify = config.get("notify")
             self._strm_path = config.get("strm_path")
+            self._source_strm_path = config.get("source_strm_path")
             self._delete_strm = config.get("delete_strm", False)
             self._delete_sidecar = config.get("delete_sidecar", False)
             self._delete_history = config.get("delete_history", False)
@@ -85,6 +87,7 @@ class StrmLinkChecker(_PluginBase):
                     "enabled": self._enabled,
                     "notify": self._notify,
                     "strm_path": self._strm_path,
+                    "source_strm_path": self._source_strm_path,
                     "delete_strm": self._delete_strm,
                     "delete_sidecar": self._delete_sidecar,
                     "delete_history": self._delete_history,
@@ -263,8 +266,28 @@ class StrmLinkChecker(_PluginBase):
                                         'props': {
                                             'model': 'strm_path',
                                             'rows': '2',
-                                            'label': 'STRM文件目录路径',
-                                            'placeholder': 'STRM文件所在目录路径，如 /media/movies（一行一个目录）'
+                                            'label': 'Emby媒体库STRM目录路径',
+                                            'placeholder': 'MP2入库后的STRM文件所在目录，如 /clouddata/movies/云盘（一行一个目录）'
+                                        }
+                                    }
+                                ]
+                            }
+                        ]
+                    },
+                    {
+                        'component': 'VRow',
+                        'content': [
+                            {
+                                'component': 'VCol',
+                                'props': {'cols': 12},
+                                'content': [
+                                    {
+                                        'component': 'VTextarea',
+                                        'props': {
+                                            'model': 'source_strm_path',
+                                            'rows': '2',
+                                            'label': '源STRM文件目录路径',
+                                            'placeholder': '软件动态生成的源STRM文件所在目录，如 /clouddata/dl/strm（一行一个目录）'
                                         }
                                     }
                                 ]
@@ -316,9 +339,10 @@ class StrmLinkChecker(_PluginBase):
                                         'props': {
                                             'type': 'info',
                                             'variant': 'tonal',
-                                            'text': '插件会扫描STRM文件中的源链接，'
-                                                    '通过HTTP请求检查源链接是否有效。'
-                                                    '如果链接失效，将通过Emby API删除该STRM文件对应的单个条目（不会删除整个视频项目）。'
+                                            'text': '插件会扫描Emby媒体库中的STRM文件，'
+                                                    '在源STRM目录中查找同名文件。'
+                                                    '如果源STRM文件不存在，说明源文件已被删除，'
+                                                    '将通过Emby API删除该STRM文件对应的条目及附属文件。'
                                                     '如果Emby地址和API Key留空，将使用系统配置的媒体服务器。'
                                         }
                                     }
@@ -354,6 +378,7 @@ class StrmLinkChecker(_PluginBase):
             "onlyonce": False,
             "notify": True,
             "strm_path": "",
+            "source_strm_path": "",
             "delete_strm": False,
             "delete_sidecar": False,
             "delete_history": False,
@@ -432,13 +457,39 @@ class StrmLinkChecker(_PluginBase):
         self._running = True
         try:
             if not self._strm_path:
-                logger.error("STRM文件目录未配置")
+                logger.error("Emby媒体库STRM目录未配置")
+                return
+
+            if not self._source_strm_path:
+                logger.error("源STRM文件目录未配置")
                 return
 
             strm_dirs = [d.strip() for d in self._strm_path.split("\n") if d.strip()]
+            source_dirs = [d.strip() for d in self._source_strm_path.split("\n") if d.strip()]
+
             if not strm_dirs:
-                logger.error("STRM文件目录未配置")
+                logger.error("Emby媒体库STRM目录未配置")
                 return
+            if not source_dirs:
+                logger.error("源STRM文件目录未配置")
+                return
+
+            # 构建源STRM文件索引：{相对路径: 绝对路径}
+            source_strm_index = {}
+            for src_dir in source_dirs:
+                if not os.path.isdir(src_dir):
+                    logger.warning(f"源STRM目录不存在: {src_dir}")
+                    continue
+                for root, dirs, files in os.walk(src_dir):
+                    for filename in files:
+                        if not filename.lower().endswith('.strm'):
+                            continue
+                        full_path = os.path.join(root, filename)
+                        # 以源目录为基准的相对路径
+                        rel_path = os.path.relpath(full_path, src_dir)
+                        source_strm_index[rel_path] = full_path
+
+            logger.info(f"源STRM文件索引构建完成，共 {len(source_strm_index)} 个文件")
 
             # 获取Emby配置
             emby_host = self._emby_host
@@ -468,13 +519,14 @@ class StrmLinkChecker(_PluginBase):
             total_deleted_sidecar = 0
             failed_items = []
 
-            for strm_dir in strm_dirs:
-                if not os.path.isdir(strm_dir):
-                    logger.warning(f"STRM目录不存在: {strm_dir}")
+            # 扫描Emby媒体库中的STRM文件，检查源文件是否存在
+            for lib_dir in strm_dirs:
+                if not os.path.isdir(lib_dir):
+                    logger.warning(f"Emby媒体库STRM目录不存在: {lib_dir}")
                     continue
 
-                logger.info(f"开始扫描STRM目录: {strm_dir}")
-                for root, dirs, files in os.walk(strm_dir):
+                logger.info(f"开始扫描Emby媒体库STRM目录: {lib_dir}")
+                for root, dirs, files in os.walk(lib_dir):
                     for filename in files:
                         if not filename.lower().endswith('.strm'):
                             continue
@@ -485,6 +537,8 @@ class StrmLinkChecker(_PluginBase):
                         try:
                             result = self.__check_single_strm(
                                 strm_path=strm_path,
+                                lib_dir=lib_dir,
+                                source_strm_index=source_strm_index,
                                 emby_host=emby_host,
                                 emby_apikey=emby_apikey
                             )
@@ -505,7 +559,7 @@ class StrmLinkChecker(_PluginBase):
             # 发送通知
             if self._notify:
                 msg = (f"扫描STRM文件: {total_checked}个\n"
-                       f"源链接失效: {total_dead}个\n"
+                       f"源文件缺失: {total_dead}个\n"
                        f"删除Emby条目: {total_deleted_emby}个\n"
                        f"删除STRM文件: {total_deleted_strm}个\n"
                        f"删除附属文件: {total_deleted_sidecar}个\n")
@@ -513,25 +567,27 @@ class StrmLinkChecker(_PluginBase):
                     msg += f"失败: {len(failed_items)}个"
                 self.post_message(
                     mtype=NotificationType.Plugin,
-                    title="STRM源链接检查完成",
+                    title="STRM源文件检查完成",
                     text=msg
                 )
 
-            logger.info(f"STRM源链接检查完成: "
+            logger.info(f"STRM源文件检查完成: "
                         f"扫描{total_checked}个, "
-                        f"失效{total_dead}个, "
+                        f"源文件缺失{total_dead}个, "
                         f"删除Emby{total_deleted_emby}个, "
                         f"删除STRM{total_deleted_strm}个, "
                         f"删除附属文件{total_deleted_sidecar}个")
 
         except Exception as e:
-            logger.error(f"STRM源链接检查异常: {str(e)}")
+            logger.error(f"STRM源文件检查异常: {str(e)}")
         finally:
             self._running = False
 
-    def __check_single_strm(self, strm_path: str, emby_host: str, emby_apikey: str) -> dict:
+    def __check_single_strm(self, strm_path: str, lib_dir: str,
+                            source_strm_index: dict,
+                            emby_host: str, emby_apikey: str) -> dict:
         """
-        检查单个STRM文件
+        检查单个STRM文件：在源目录中查找同名文件
         """
         result = {
             "strm_path": strm_path,
@@ -543,24 +599,19 @@ class StrmLinkChecker(_PluginBase):
         }
 
         try:
-            # 读取STRM文件内容（源链接）
-            with open(strm_path, 'r', encoding='utf-8') as f:
-                source_url = f.read().strip()
+            # 计算相对于媒体库目录的路径
+            rel_path = os.path.relpath(strm_path, lib_dir)
 
-            if not source_url:
-                logger.warning(f"STRM文件为空: {strm_path}")
+            # 在源STRM索引中查找
+            source_exists = rel_path in source_strm_index
+
+            if source_exists:
+                logger.debug(f"源STRM文件存在: {strm_path} -> {source_strm_index[rel_path]}")
+                self.__save_check_record(strm_path, str(rel_path), "有效", "无操作")
                 return result
 
-            # 检查源链接是否有效
-            is_valid = self.__check_url_valid(source_url)
-
-            if is_valid:
-                logger.debug(f"源链接有效: {strm_path}")
-                self.__save_check_record(strm_path, source_url, "有效", "无操作")
-                return result
-
-            # 源链接失效
-            logger.warning(f"源链接失效: {strm_path} -> {source_url[:100]}...")
+            # 源STRM文件不存在
+            logger.warning(f"源STRM文件不存在: {rel_path} (来自 {strm_path})")
             result["dead"] = True
 
             # 通过转移记录查找媒体信息
@@ -576,7 +627,7 @@ class StrmLinkChecker(_PluginBase):
             if transfer_his:
                 title = transfer_his.title or ""
 
-                # 通过Emby API删除该STRM文件对应的单个条目（不是整个视频项目）
+                # 通过Emby API删除该STRM文件对应的单个条目
                 emby_ok = self.__delete_emby_item_by_path(
                     emby_host=emby_host,
                     emby_apikey=emby_apikey,
@@ -621,7 +672,7 @@ class StrmLinkChecker(_PluginBase):
                 action_parts.append("未操作(仅报告)")
 
             self.__save_check_record(
-                strm_path, source_url, "失效",
+                strm_path, str(rel_path), "源文件缺失",
                 ", ".join(action_parts),
                 title=title
             )
@@ -633,48 +684,6 @@ class StrmLinkChecker(_PluginBase):
 
         return result
 
-    def __check_url_valid(self, url: str) -> bool:
-        """
-        检查URL是否有效（通过HTTP HEAD请求）
-        """
-        try:
-            headers = {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 '
-                              '(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-            }
-            resp = requests.head(
-                url,
-                headers=headers,
-                timeout=self._request_timeout,
-                allow_redirects=True,
-                verify=False
-            )
-            # 2xx 或 3xx 认为有效
-            if resp.status_code < 400:
-                return True
-
-            # 如果HEAD不支持，尝试GET range
-            if resp.status_code in [400, 405, 501]:
-                headers['Range'] = 'bytes=0-0'
-                resp2 = requests.get(
-                    url,
-                    headers=headers,
-                    timeout=self._request_timeout,
-                    allow_redirects=True,
-                    verify=False
-                )
-                return resp2.status_code in [200, 206, 301, 302, 303, 304, 307, 308]
-
-            return False
-        except requests.ConnectionError:
-            return False
-        except requests.Timeout:
-            logger.debug(f"请求超时: {url[:80]}...")
-            return False
-        except Exception as e:
-            logger.debug(f"请求异常: {url[:80]}... {str(e)}")
-            return False
-
     def __delete_emby_item_by_path(self, emby_host: str, emby_apikey: str,
                                    strm_path: str) -> bool:
         """
@@ -684,14 +693,8 @@ class StrmLinkChecker(_PluginBase):
         try:
             # 通过路径精确搜索Emby中的条目
             search_url = f"{emby_host}emby/Items"
-            params = {
-                "api_key": emby_apikey,
-                "Recursive": "true",
-                "Fields": "Path,ProviderIds",
-            }
 
             # 先尝试用文件名搜索
-            strm_name = Path(strm_path).name
             params2 = {
                 "api_key": emby_apikey,
                 "SearchTerm": Path(strm_path).stem,
