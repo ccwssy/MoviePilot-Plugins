@@ -510,17 +510,27 @@ class StrmLinkChecker(_PluginBase):
 
             # 发送通知
             if self._notify:
-                msg = (f"扫描STRM文件: {total_checked}个\n"
-                       f"源文件缺失: {total_dead}个\n"
-                       f"  - 无转移记录: {total_no_record}个\n"
-                       f"删除Emby条目: {total_deleted_emby}个\n"
-                       f"删除STRM文件: {total_deleted_strm}个\n"
-                       f"删除附属文件: {total_deleted_sidecar}个\n")
+                msg_lines = [
+                    "━━━━━━━━━━━━━━━━━━",
+                    f"📊 扫描统计",
+                    f"  ├ 检查文件: {total_checked} 个",
+                    f"  └ 源文件缺失: {total_dead} 个",
+                    "",
+                    f"🔧 清理操作",
+                    f"  ├ 删除 Emby 条目: {total_deleted_emby} 个",
+                    f"  ├ 删除 STRM 文件: {total_deleted_strm} 个",
+                    f"  └ 删除附属文件: {total_deleted_sidecar} 个",
+                ]
+                if total_no_record > 0:
+                    msg_lines.insert(4, f"     └ 无转移记录: {total_no_record} 个")
                 if failed_items:
-                    msg += f"失败: {len(failed_items)}个"
+                    msg_lines.append("")
+                    msg_lines.append(f"⚠️ 检查失败: {len(failed_items)} 个")
+                msg_lines.append("━━━━━━━━━━━━━━━━━━")
+                msg = "\n".join(msg_lines)
                 self.post_message(
                     mtype=NotificationType.Plugin,
-                    title="STRM源文件检查完成",
+                    title="🧹 STRM 失效清理 · 检查完成",
                     text=msg
                 )
 
