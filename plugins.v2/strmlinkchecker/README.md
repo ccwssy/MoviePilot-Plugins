@@ -80,6 +80,7 @@ GET /api/v1/plugin/StrmLinkChecker/run_check?apikey=YOUR_API_KEY
 
 ## 版本历史
 
+- **v1.0.6** - 插件详情页按状态分类展示检查记录
 - **v1.0.5** - 插件名称改为 Strm失效清理
 - **v1.0.4** - 配置表单增加"立即运行一次"开关
 - **v1.0.3** - 移除请求超时配置项

@@ -26,7 +26,7 @@ class StrmLinkChecker(_PluginBase):
     plugin_name = "Strm失效清理"
     plugin_desc = "通过转移记录对比Emby媒体库STRM文件与源STRM文件，如果源文件已删除，同步清理Emby条目及附属文件。"
     plugin_icon = "strmcheck.png"
-    plugin_version = "1.0.5"
+    plugin_version = "1.0.6"
     plugin_author = "ccwssy"
     author_url = "https://github.com/ccwssy/MoviePilot-Plugins"
     plugin_config_prefix = "strmlinkchecker_"
@@ -368,53 +368,62 @@ class StrmLinkChecker(_PluginBase):
                 }
             ]
         history = sorted(history, key=lambda x: x.get('check_time', ''), reverse=True)
-        contents = []
-        for item in history[:50]:
-            strm_path = item.get("strm_path", "")
-            source_url = item.get("source_url", "")
-            status = item.get("status", "")
-            title = item.get("title", "")
-            check_time = item.get("check_time", "")
-            action = item.get("action", "")
 
-            status_color = "success" if status == "有效" else "error"
-            contents.append({
-                'component': 'VCard',
-                'content': [
-                    {
-                        'component': 'VCardText',
-                        'props': {'class': 'pa-0 px-2'},
-                        'text': f'文件：{Path(strm_path).name}'
-                    },
-                    {
-                        'component': 'VCardText',
-                        'props': {'class': 'pa-0 px-2'},
-                        'text': f'媒体：{title}'
-                    },
-                    {
-                        'component': 'VCardText',
-                        'props': {'class': 'pa-0 px-2'},
-                        'text': f'状态：{status}'
-                    },
-                    {
-                        'component': 'VCardText',
-                        'props': {'class': 'pa-0 px-2'},
-                        'text': f'操作：{action}'
-                    },
-                    {
-                        'component': 'VCardText',
-                        'props': {'class': 'pa-0 px-2'},
-                        'text': f'时间：{check_time}'
-                    }
-                ]
-            })
-        return [
-            {
-                'component': 'div',
-                'props': {'class': 'grid gap-3 grid-info-card'},
-                'content': contents
-            }
-        ]
+        # 按状态分类
+        valid_items = [h for h in history if h.get('status') == '有效']
+        no_record_items = [h for h in history if h.get('status') == '无转移记录' or h.get('status') == '无源路径']
+        dead_items = [h for h in history if h.get('status') == '源文件缺失']
+        failed_items = [h for h in history if h.get('status') == '检查失败']
+        other_items = [h for h in history if h not in valid_items and h not in no_record_items
+                       and h not in dead_items and h not in failed_items]
+
+        def render_section(title: str, items: list, color: str, max_count: int = 20):
+            if not items:
+                return []
+            cards = []
+            for item in items[:max_count]:
+                strm_path = item.get("strm_path", "")
+                status = item.get("status", "")
+                title_text = item.get("title", "")
+                action = item.get("action", "")
+                check_time = item.get("check_time", "")
+                cards.append({
+                    'component': 'VCard',
+                    'props': {'class': f'border-left-{color}'},
+                    'content': [
+                        {
+                            'component': 'VCardText',
+                            'props': {'class': 'pa-0 px-2 py-1'},
+                            'text': f'{Path(strm_path).name}'
+                        },
+                        {
+                            'component': 'VCardText',
+                            'props': {'class': 'pa-0 px-2 py-1 text-caption text-grey'},
+                            'text': f'{title_text} | {action} | {check_time}'
+                        }
+                    ]
+                })
+            return [
+                {
+                    'component': 'div',
+                    'props': {'class': 'mt-3 mb-1 font-weight-bold'},
+                    'text': f'{title} ({len(items)})'
+                },
+                {
+                    'component': 'div',
+                    'props': {'class': 'grid gap-2 grid-info-card'},
+                    'content': cards
+                }
+            ]
+
+        sections = []
+        sections.extend(render_section('✅ 有效', valid_items, 'success', 10))
+        sections.extend(render_section('⚠️ 无转移记录', no_record_items, 'warning', 20))
+        sections.extend(render_section('❌ 源文件缺失', dead_items, 'error', 50))
+        sections.extend(render_section('💥 检查失败', failed_items, 'error', 20))
+        sections.extend(render_section('📋 其他', other_items, 'grey', 20))
+
+        return sections
 
     def __check_all(self):
         """
