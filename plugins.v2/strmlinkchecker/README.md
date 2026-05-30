@@ -80,6 +80,7 @@ GET /api/v1/plugin/StrmLinkChecker/run_check?apikey=YOUR_API_KEY
 
 ## 版本历史
 
+- **v1.0.4** - 配置表单增加"立即运行一次"开关
 - **v1.0.3** - 移除请求超时配置项
 - **v1.0.2** - 修正配置项说明，明确路径为 MP2 容器内路径
 - **v1.0.1** - 改为通过转移记录 src 字段查找源 STRM 文件

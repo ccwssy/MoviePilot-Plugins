@@ -26,7 +26,7 @@ class StrmLinkChecker(_PluginBase):
     plugin_name = "STRM源链接检查"
     plugin_desc = "通过转移记录对比Emby媒体库STRM文件与源STRM文件，如果源文件已删除，同步清理Emby条目及附属文件。"
     plugin_icon = "strmcheck.png"
-    plugin_version = "1.0.3"
+    plugin_version = "1.0.4"
     plugin_author = "ccwssy"
     author_url = "https://github.com/ccwssy/MoviePilot-Plugins"
     plugin_config_prefix = "strmlinkchecker_"
@@ -237,11 +237,10 @@ class StrmLinkChecker(_PluginBase):
                                 'props': {'cols': 12, 'md': 4},
                                 'content': [
                                     {
-                                        'component': 'VTextField',
+                                        'component': 'VSwitch',
                                         'props': {
-                                            'model': 'cron',
-                                            'label': '执行周期(cron)',
-                                            'placeholder': '5位cron表达式，如 0 6 * * *'
+                                            'model': 'onlyonce',
+                                            'label': '立即运行一次',
                                         }
                                     }
                                 ]
