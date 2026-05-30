@@ -26,7 +26,7 @@ class StrmLinkChecker(_PluginBase):
     plugin_name = "STRM源链接检查"
     plugin_desc = "监控STRM文件中的源链接，如果源链接失效，通过整理记录同步删除已入库Emby中对应的条目及附属文件。"
     plugin_icon = "strmcheck.png"
-    plugin_version = "2.0.0"
+    plugin_version = "1.0"
     plugin_author = "ccwssy"
     author_url = "https://github.com/ccwssy/MoviePilot-Plugins"
     plugin_config_prefix = "strmlinkchecker_"
