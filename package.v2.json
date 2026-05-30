@@ -1,15 +1,17 @@
 {
-  "StrmLinkChecker": {
-    "name": "STRM源链接检查",
-    "description": "监控STRM文件中的源链接，如果源链接失效，通过整理记录同步删除已入库Emby中对应的条目及附属文件。",
-    "labels": "STRM,源链接,检查,清理",
-    "version": "2.0.0",
-    "icon": "strmcheck.png",
-    "author": "ccwssy",
-    "level": 2,
-    "history": {
-      "v2.0.0": "全面重构为STRM源链接检查插件 v2.0",
-      "v1.0": "初始版本"
+    "StrmLinkChecker": {
+        "name": "STRM源链接检查",
+        "description": "通过转移记录对比Emby媒体库STRM文件与源STRM文件，如果源文件已删除，同步清理Emby条目及附属文件。",
+        "labels": "STRM,源链接,检查,清理",
+        "version": "1.0.3",
+        "icon": "strmcheck.png",
+        "author": "ccwssy",
+        "level": 2,
+        "history": {
+            "v1.0.3": "移除请求超时配置项",
+            "v1.0.2": "修正配置项说明，明确路径为MP2容器内路径",
+            "v1.0.1": "改为通过转移记录src字段查找源STRM文件",
+            "v1.0.0": "初始版本，基于v2.0.0重构版本号体系"
+        }
     }
-  }
 }
