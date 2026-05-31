@@ -589,6 +589,7 @@ class StrmLinkChecker(_PluginBase):
             total_url_dead = 0
             total_url_alive = 0
             total_url_skipped = 0
+            total_url_cached = 0
             failed_items = []
 
             # URL可用性检查 - 重置每日计数（如果日期变了）
@@ -621,7 +622,7 @@ class StrmLinkChecker(_PluginBase):
 
             def url_check_worker(strm_path: str):
                 """URL检查工作线程"""
-                nonlocal total_url_dead, total_url_alive, total_url_skipped
+                nonlocal total_url_dead, total_url_alive, total_url_skipped, total_url_cached
                 with url_check_sem:
                     with self._url_check_count_lock:
                         if self._url_check_enabled and self._url_check_today_count >= self._url_check_daily_limit:
@@ -630,7 +631,9 @@ class StrmLinkChecker(_PluginBase):
                     try:
                         result = self.__check_single_strm_url(strm_path)
                         with url_check_lock:
-                            if result.get("url_dead"):
+                            if result.get("cached"):
+                                total_url_cached += 1
+                            elif result.get("url_dead"):
                                 total_url_dead += 1
                             elif result.get("url_alive"):
                                 total_url_alive += 1
@@ -692,6 +695,7 @@ class StrmLinkChecker(_PluginBase):
                     msg_lines.append(f"🌐 URL可用性检查")
                     msg_lines.append(f"  ├ 链接有效: {total_url_alive} 个")
                     msg_lines.append(f"  ├ 链接失效: {total_url_dead} 个")
+                    msg_lines.append(f"  ├ 缓存跳过: {total_url_cached} 个")
                     msg_lines.append(f"  └ 跳过(已达上限): {total_url_skipped} 个")
                 if failed_items:
                     msg_lines.append("")
@@ -849,12 +853,34 @@ class StrmLinkChecker(_PluginBase):
         """
         通过HTTP请求测试STRM文件中的URL是否可访问（无转移记录时使用）
         严格风控：单线程、冷却时间、每日上限
+        已检查过的文件会缓存结果，下次mtime未变则跳过
         """
         result = {
             "strm_path": strm_path,
             "url_dead": False,
             "url_alive": False,
+            "cached": False,
         }
+
+        # 检查缓存：如果该文件已检查过且mtime未变，直接跳过
+        cache = self.get_data('url_check_cache') or {}
+        try:
+            current_mtime = os.path.getmtime(strm_path)
+        except OSError:
+            current_mtime = 0
+
+        cached_entry = cache.get(strm_path)
+        if cached_entry:
+            cached_mtime = cached_entry.get("mtime", 0)
+            if abs(cached_mtime - current_mtime) < 0.001:
+                logger.debug(f"URL检查缓存命中，跳过: {strm_path}")
+                result["cached"] = True
+                cached_status = cached_entry.get("status", "未知")
+                if cached_status == "有效":
+                    result["url_alive"] = True
+                elif cached_status == "失效":
+                    result["url_dead"] = True
+                return result
 
         # 检查每日上限
         with self._url_check_count_lock:
@@ -921,6 +947,8 @@ class StrmLinkChecker(_PluginBase):
                     f"URL有效(HTTP {status_code})",
                     title=Path(strm_path).stem
                 )
+                # 更新缓存
+                self.__update_url_check_cache(strm_path, current_mtime, "有效")
             else:
                 logger.warning(f"URL不可用 [{status_code}]: {url[:100]}...")
                 result["url_dead"] = True
@@ -929,6 +957,8 @@ class StrmLinkChecker(_PluginBase):
                     f"URL不可用(HTTP {status_code})",
                     title=Path(strm_path).stem
                 )
+                # 更新缓存
+                self.__update_url_check_cache(strm_path, current_mtime, "失效")
 
         except Exception as e:
             logger.error(f"URL检查异常 {strm_path}: {str(e)}")
@@ -943,6 +973,23 @@ class StrmLinkChecker(_PluginBase):
                 time.sleep(self._url_check_cooldown)
 
         return result
+
+    def __update_url_check_cache(self, strm_path: str, mtime: float, status: str):
+        """
+        更新URL检查缓存，记录已检查过的STRM文件及其mtime
+        """
+        cache = self.get_data('url_check_cache') or {}
+        cache[strm_path] = {
+            "mtime": mtime,
+            "status": status,
+            "checked_at": time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
+        }
+        # 限制缓存大小，最多保留10000条
+        if len(cache) > 10000:
+            # 按检查时间排序，移除最旧的
+            sorted_items = sorted(cache.items(), key=lambda x: x[1].get("checked_at", ""))
+            cache = dict(sorted_items[-8000:])
+        self.save_data('url_check_cache', cache)
 
     def __delete_emby_item_by_path(self, emby_host: str, emby_apikey: str,
                                    strm_path: str) -> bool:
