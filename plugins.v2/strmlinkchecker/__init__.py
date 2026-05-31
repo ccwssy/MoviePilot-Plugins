@@ -2,7 +2,7 @@ import os
 import re
 import time
 import threading
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, time as dtime
 from pathlib import Path
 from typing import Any, List, Dict, Tuple, Optional
 
@@ -26,7 +26,7 @@ class StrmLinkChecker(_PluginBase):
     plugin_name = "Strm失效清理"
     plugin_desc = "通过转移记录对比Emby媒体库STRM文件与源STRM文件，如果源文件已删除，同步清理Emby条目及附属文件。"
     plugin_icon = "strmcheck.png"
-    plugin_version = "1.0.7"
+    plugin_version = "1.1.0"
     plugin_author = "ccwssy"
     author_url = "https://github.com/ccwssy/MoviePilot-Plugins"
     plugin_config_prefix = "strmlinkchecker_"
@@ -48,6 +48,17 @@ class StrmLinkChecker(_PluginBase):
     _running = False
     _transferhis = None
 
+    # 远程可达性验证（风险功能）相关
+    _verify_enabled = False
+    _verify_threads = 1
+    _verify_cooldown = 5
+    _verify_max_daily = 50
+    _verify_peak_avoid = True
+    _verify_peak_start = "23:00"
+    _verify_peak_end = "07:00"
+    _verify_count = 0
+    _verify_lock = threading.Lock()
+
     def init_plugin(self, config: dict = None):
         self._transferhis = TransferHistoryOper()
 
@@ -65,6 +76,15 @@ class StrmLinkChecker(_PluginBase):
             self._delete_history = config.get("delete_history", False)
             self._emby_host = config.get("emby_host")
             self._emby_apikey = config.get("emby_apikey")
+            # 远程可达性验证配置
+            self._verify_enabled = config.get("verify_enabled", False)
+            self._verify_threads = max(1, int(config.get("verify_threads", 1)))
+            self._verify_cooldown = max(1, int(config.get("verify_cooldown", 5)))
+            self._verify_max_daily = max(1, int(config.get("verify_max_daily", 50)))
+            self._verify_peak_avoid = config.get("verify_peak_avoid", True)
+            self._verify_peak_start = config.get("verify_peak_start", "23:00")
+            self._verify_peak_end = config.get("verify_peak_end", "07:00")
+            self._verify_count = 0
 
         if self._enabled:
             if self._onlyonce:
@@ -88,6 +108,13 @@ class StrmLinkChecker(_PluginBase):
                     "delete_history": self._delete_history,
                     "emby_host": self._emby_host,
                     "emby_apikey": self._emby_apikey,
+                    "verify_enabled": self._verify_enabled,
+                    "verify_threads": self._verify_threads,
+                    "verify_cooldown": self._verify_cooldown,
+                    "verify_max_daily": self._verify_max_daily,
+                    "verify_peak_avoid": self._verify_peak_avoid,
+                    "verify_peak_start": self._verify_peak_start,
+                    "verify_peak_end": self._verify_peak_end,
                 })
 
             if self._scheduler and self._scheduler.get_jobs():
@@ -341,7 +368,141 @@ class StrmLinkChecker(_PluginBase):
                                 ]
                             }
                         ]
-                    }
+                    },
+                    # ─── 远程可达性验证（风险功能） ───
+                    {
+                        'component': 'VRow',
+                        'content': [
+                            {
+                                'component': 'VCol',
+                                'props': {'cols': 12},
+                                'content': [
+                                    {
+                                        'component': 'VAlert',
+                                        'props': {
+                                            'type': 'error',
+                                            'variant': 'tonal',
+                                            'title': '⚠️ 远程可达性验证（风险功能）',
+                                            'text': '当STRM文件无转移记录时，读取文件内URL并发送HEAD请求验证是否可达。'
+                                                    '开启后可能触发网盘/源站的风控限制，请严格控制频率。'
+                                                    '建议在使用前确认你的STRM源站允许HEAD请求。'
+                                        }
+                                    }
+                                ]
+                            }
+                        ]
+                    },
+                    {
+                        'component': 'VRow',
+                        'content': [
+                            {
+                                'component': 'VCol',
+                                'props': {'cols': 12, 'md': 3},
+                                'content': [
+                                    {
+                                        'component': 'VSwitch',
+                                        'props': {
+                                            'model': 'verify_enabled',
+                                            'label': '启用远程验证',
+                                            'color': 'error',
+                                        }
+                                    }
+                                ]
+                            },
+                            {
+                                'component': 'VCol',
+                                'props': {'cols': 12, 'md': 3},
+                                'content': [
+                                    {
+                                        'component': 'VTextField',
+                                        'props': {
+                                            'model': 'verify_threads',
+                                            'label': '线程数',
+                                            'placeholder': '1-2',
+                                            'type': 'number'
+                                        }
+                                    }
+                                ]
+                            },
+                            {
+                                'component': 'VCol',
+                                'props': {'cols': 12, 'md': 3},
+                                'content': [
+                                    {
+                                        'component': 'VTextField',
+                                        'props': {
+                                            'model': 'verify_cooldown',
+                                            'label': '请求间隔(秒)',
+                                            'placeholder': '5',
+                                            'type': 'number'
+                                        }
+                                    }
+                                ]
+                            },
+                            {
+                                'component': 'VCol',
+                                'props': {'cols': 12, 'md': 3},
+                                'content': [
+                                    {
+                                        'component': 'VTextField',
+                                        'props': {
+                                            'model': 'verify_max_daily',
+                                            'label': '单次最大验证数',
+                                            'placeholder': '50',
+                                            'type': 'number'
+                                        }
+                                    }
+                                ]
+                            }
+                        ]
+                    },
+                    {
+                        'component': 'VRow',
+                        'content': [
+                            {
+                                'component': 'VCol',
+                                'props': {'cols': 12, 'md': 4},
+                                'content': [
+                                    {
+                                        'component': 'VSwitch',
+                                        'props': {
+                                            'model': 'verify_peak_avoid',
+                                            'label': '避开高峰时段',
+                                            'color': 'error',
+                                        }
+                                    }
+                                ]
+                            },
+                            {
+                                'component': 'VCol',
+                                'props': {'cols': 12, 'md': 4},
+                                'content': [
+                                    {
+                                        'component': 'VTextField',
+                                        'props': {
+                                            'model': 'verify_peak_start',
+                                            'label': '低峰起始时间',
+                                            'placeholder': '23:00',
+                                        }
+                                    }
+                                ]
+                            },
+                            {
+                                'component': 'VCol',
+                                'props': {'cols': 12, 'md': 4},
+                                'content': [
+                                    {
+                                        'component': 'VTextField',
+                                        'props': {
+                                            'model': 'verify_peak_end',
+                                            'label': '低峰结束时间',
+                                            'placeholder': '07:00',
+                                        }
+                                    }
+                                ]
+                            }
+                        ]
+                    },
                 ]
             }
         ], {
@@ -355,6 +516,13 @@ class StrmLinkChecker(_PluginBase):
             "delete_history": False,
             "emby_host": "",
             "emby_apikey": "",
+            "verify_enabled": False,
+            "verify_threads": 1,
+            "verify_cooldown": 5,
+            "verify_max_daily": 50,
+            "verify_peak_avoid": True,
+            "verify_peak_start": "23:00",
+            "verify_peak_end": "07:00",
         }
 
     def get_page(self) -> List[dict]:
@@ -371,10 +539,13 @@ class StrmLinkChecker(_PluginBase):
 
         # 按状态分类
         valid_items = [h for h in history if h.get('status') == '有效']
+        remote_valid_items = [h for h in history if h.get('status') == '远程有效']
+        remote_dead_items = [h for h in history if h.get('status') == '远程不可达']
         no_record_items = [h for h in history if h.get('status') == '无转移记录' or h.get('status') == '无源路径']
         dead_items = [h for h in history if h.get('status') == '源文件缺失']
         failed_items = [h for h in history if h.get('status') == '检查失败']
-        other_items = [h for h in history if h not in valid_items and h not in no_record_items
+        other_items = [h for h in history if h not in valid_items and h not in remote_valid_items
+                       and h not in remote_dead_items and h not in no_record_items
                        and h not in dead_items and h not in failed_items]
 
         def render_section(title: str, items: list, color: str, max_count: int = 20):
@@ -418,6 +589,8 @@ class StrmLinkChecker(_PluginBase):
 
         sections = []
         sections.extend(render_section('✅ 有效', valid_items, 'success', 10))
+        sections.extend(render_section('🌐 远程有效', remote_valid_items, 'info', 20))
+        sections.extend(render_section('📡 远程不可达', remote_dead_items, 'warning', 20))
         sections.extend(render_section('⚠️ 无转移记录', no_record_items, 'warning', 20))
         sections.extend(render_section('❌ 源文件缺失', dead_items, 'error', 50))
         sections.extend(render_section('💥 检查失败', failed_items, 'error', 20))
@@ -434,6 +607,8 @@ class StrmLinkChecker(_PluginBase):
             return
 
         self._running = True
+        # 重置验证计数器
+        self._verify_count = 0
         try:
             if not self._strm_path:
                 logger.error("Emby媒体库STRM目录未配置")
@@ -469,6 +644,8 @@ class StrmLinkChecker(_PluginBase):
             total_deleted_strm = 0
             total_deleted_sidecar = 0
             total_no_record = 0
+            total_verify_valid = 0
+            total_verify_dead = 0
             failed_items = []
 
             # 扫描Emby媒体库中的STRM文件
@@ -504,6 +681,12 @@ class StrmLinkChecker(_PluginBase):
                                     total_no_record += 1
                                 if result.get("failed"):
                                     failed_items.append(result.get("strm_path", ""))
+                                continue
+                            # 非dead的记录：统计验证结果
+                            if result.get("verify_valid"):
+                                total_verify_valid += 1
+                            if result.get("verify_dead"):
+                                total_verify_dead += 1
                         except Exception as e:
                             logger.error(f"检查STRM文件失败 {strm_path}: {str(e)}")
                             failed_items.append(strm_path)
@@ -523,6 +706,12 @@ class StrmLinkChecker(_PluginBase):
                 ]
                 if total_no_record > 0:
                     msg_lines.insert(4, f"     └ 无转移记录: {total_no_record} 个")
+                # 远程验证统计（仅在启用时显示）
+                if self._verify_enabled:
+                    msg_lines.insert(-1, "")
+                    msg_lines.insert(-1, f"🌐 远程可达性验证")
+                    msg_lines.insert(-1, f"  ├ 远程有效: {total_verify_valid} 个（保留）")
+                    msg_lines.insert(-1, f"  └ 远程不可达: {total_verify_dead} 个（已清理）")
                 if failed_items:
                     msg_lines.append("")
                     msg_lines.append(f"⚠️ 检查失败: {len(failed_items)} 个")
@@ -537,6 +726,8 @@ class StrmLinkChecker(_PluginBase):
             logger.info(f"STRM源文件检查完成: "
                         f"扫描{total_checked}个, "
                         f"源文件缺失{total_dead}个(无记录{total_no_record}), "
+                        f"远程有效{total_verify_valid}个, "
+                        f"远程不可达{total_verify_dead}个, "
                         f"删除Emby{total_deleted_emby}个, "
                         f"删除STRM{total_deleted_strm}个, "
                         f"删除附属文件{total_deleted_sidecar}个")
@@ -545,6 +736,91 @@ class StrmLinkChecker(_PluginBase):
             logger.error(f"STRM源文件检查异常: {str(e)}")
         finally:
             self._running = False
+
+    def __can_verify(self) -> bool:
+        """
+        检查当前是否满足验证条件：未达日限且在低峰时段内
+        """
+        if self._verify_count >= self._verify_max_daily:
+            logger.debug(f"远程验证已达单次上限({self._verify_max_daily})，跳过")
+            return False
+        if not self._verify_peak_avoid:
+            return True
+        # 检查当前时间是否在低峰时段内
+        now = datetime.now().time()
+        try:
+            start_parts = self._verify_peak_start.split(":")
+            end_parts = self._verify_peak_end.split(":")
+            peak_start = dtime(int(start_parts[0]), int(start_parts[1]))
+            peak_end = dtime(int(end_parts[0]), int(end_parts[1]))
+        except (IndexError, ValueError):
+            logger.warning("低峰时段格式错误，使用默认 23:00-07:00")
+            peak_start = dtime(23, 0)
+            peak_end = dtime(7, 0)
+
+        if peak_start <= peak_end:
+            # 同一天内（如 01:00-06:00）
+            return peak_start <= now <= peak_end
+        else:
+            # 跨天（如 23:00-07:00）
+            return now >= peak_start or now <= peak_end
+
+    def __verify_strm_url(self, strm_path: str) -> Tuple[bool, str]:
+        """
+        读取STRM文件中的URL，通过HEAD请求验证远程可达性。
+        使用线程锁控制频率（冷却时间）。
+        返回 (可达, URL字符串)
+        """
+        url = ""
+        try:
+            with open(strm_path, 'r', encoding='utf-8') as f:
+                url = f.read().strip()
+        except Exception as e:
+            logger.warning(f"读取STRM文件失败 {strm_path}: {e}")
+            return False, url
+
+        if not url:
+            logger.warning(f"STRM文件内容为空: {strm_path}")
+            return False, url
+
+        # 风控：冷却 + 计数
+        with self._verify_lock:
+            if self._verify_count > 0:
+                time.sleep(self._verify_cooldown)
+            self._verify_count += 1
+
+        logger.info(f"验证STRM远程可达性: {url} (来自 {strm_path})")
+        try:
+            session = requests.Session()
+            session.verify = False
+            session.max_redirects = 5
+
+            headers = {
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+                              " (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+                "Range": "bytes=0-1",
+            }
+            resp = session.head(url, headers=headers, timeout=10, allow_redirects=True)
+            if resp.status_code < 400:
+                logger.info(f"STRM远程可达: {url} (HTTP {resp.status_code})")
+                return True, url
+            else:
+                # 有些CDN不支持HEAD，尝试GET + Range
+                resp2 = session.get(url, headers=headers, timeout=10, stream=True)
+                if resp2.status_code < 400:
+                    logger.info(f"STRM远程可达(GET): {url} (HTTP {resp2.status_code})")
+                    return True, url
+                logger.warning(f"STRM远程不可达: {url} (HEAD {resp.status_code}, GET {resp2.status_code})")
+                return False, url
+        except requests.Timeout:
+            logger.warning(f"STRM验证超时: {url}")
+            return False, url
+        except requests.ConnectionError as e:
+            logger.warning(f"STRM验证连接失败: {url} - {e}")
+            return False, url
+        except Exception as e:
+            logger.warning(f"STRM验证异常: {url} - {e}")
+            return False, url
 
     def __check_single_strm(self, strm_path: str,
                             emby_host: str, emby_apikey: str) -> dict:
@@ -559,6 +835,8 @@ class StrmLinkChecker(_PluginBase):
             "sidecar_deleted": False,
             "no_record": False,
             "failed": False,
+            "verify_valid": False,
+            "verify_dead": False,
         }
 
         try:
@@ -579,6 +857,54 @@ class StrmLinkChecker(_PluginBase):
 
             if not transfer_his:
                 logger.warning(f"未找到转移记录: {strm_path}")
+                # 尝试远程可达性验证
+                if self._verify_enabled and self.__can_verify():
+                    reachable, strm_url = self.__verify_strm_url(strm_path)
+                    if reachable:
+                        logger.info(f"STRM远程有效，保留: {strm_url}")
+                        result["verify_valid"] = True
+                        self.__save_check_record(
+                            strm_path, strm_url, "远程有效", "保留",
+                            title=Path(strm_path).stem
+                        )
+                        return result
+                    # 验证不可达 → 执行清理
+                    result["no_record"] = True
+                    result["dead"] = True
+                    result["verify_dead"] = True
+                    # 清理Emby条目
+                    emby_ok = self.__delete_emby_item_by_path(
+                        emby_host=emby_host, emby_apikey=emby_apikey, strm_path=strm_path
+                    )
+                    if emby_ok:
+                        result["emby_deleted"] = True
+                    # 清理附属文件
+                    if self._delete_sidecar:
+                        if self.__delete_sidecar_files(strm_path):
+                            result["sidecar_deleted"] = True
+                    # 清理STRM文件
+                    if self._delete_strm:
+                        try:
+                            os.remove(strm_path)
+                            logger.info(f"已删除远程不可达STRM文件: {strm_path}")
+                            result["strm_deleted"] = True
+                            self.__remove_empty_parent(Path(strm_path).parent)
+                        except Exception as e:
+                            logger.error(f"删除STRM文件失败: {strm_path}: {e}")
+                    action_parts = []
+                    if result["emby_deleted"]:
+                        action_parts.append("已删除Emby条目")
+                    if result["strm_deleted"]:
+                        action_parts.append("已删除STRM文件")
+                    if result["sidecar_deleted"]:
+                        action_parts.append("已删除附属文件")
+                    self.__save_check_record(
+                        strm_path, strm_url, "远程不可达",
+                        ", ".join(action_parts) if action_parts else "已清理",
+                        title=Path(strm_path).stem
+                    )
+                    return result
+                # 未启用验证或不在低峰时段
                 result["no_record"] = True
                 result["dead"] = True
                 self.__save_check_record(strm_path, "", "无转移记录", "跳过")
@@ -588,6 +914,49 @@ class StrmLinkChecker(_PluginBase):
             src_path = transfer_his.src
             if not src_path:
                 logger.warning(f"转移记录中无源路径: {strm_path}")
+                # 同上的验证逻辑
+                if self._verify_enabled and self.__can_verify():
+                    reachable, strm_url = self.__verify_strm_url(strm_path)
+                    if reachable:
+                        logger.info(f"STRM远程有效，保留: {strm_url}")
+                        result["verify_valid"] = True
+                        self.__save_check_record(
+                            strm_path, strm_url, "远程有效", "保留",
+                            title=Path(strm_path).stem
+                        )
+                        return result
+                    result["no_record"] = True
+                    result["dead"] = True
+                    result["verify_dead"] = True
+                    emby_ok = self.__delete_emby_item_by_path(
+                        emby_host=emby_host, emby_apikey=emby_apikey, strm_path=strm_path
+                    )
+                    if emby_ok:
+                        result["emby_deleted"] = True
+                    if self._delete_sidecar:
+                        if self.__delete_sidecar_files(strm_path):
+                            result["sidecar_deleted"] = True
+                    if self._delete_strm:
+                        try:
+                            os.remove(strm_path)
+                            logger.info(f"已删除远程不可达STRM文件: {strm_path}")
+                            result["strm_deleted"] = True
+                            self.__remove_empty_parent(Path(strm_path).parent)
+                        except Exception as e:
+                            logger.error(f"删除STRM文件失败: {strm_path}: {e}")
+                    action_parts = []
+                    if result["emby_deleted"]:
+                        action_parts.append("已删除Emby条目")
+                    if result["strm_deleted"]:
+                        action_parts.append("已删除STRM文件")
+                    if result["sidecar_deleted"]:
+                        action_parts.append("已删除附属文件")
+                    self.__save_check_record(
+                        strm_path, strm_url, "远程不可达",
+                        ", ".join(action_parts) if action_parts else "已清理",
+                        title=Path(strm_path).stem
+                    )
+                    return result
                 result["no_record"] = True
                 result["dead"] = True
                 self.__save_check_record(strm_path, "", "无源路径", "跳过")
