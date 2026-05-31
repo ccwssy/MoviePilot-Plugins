@@ -495,13 +495,18 @@ class StrmLinkChecker(_PluginBase):
                        and h not in dead_items and h not in failed_items]
 
         def render_section(title: str, items: list, color: str, max_count: int = 20):
-            if not items:
-                return []
             total = len(items)
-            show_count = min(total, max_count)
             title_text = f'{title} ({total})'
             if total > max_count:
                 title_text += '（只显示部分）'
+            if not items:
+                return [
+                    {
+                        'component': 'div',
+                        'props': {'class': 'mt-3 mb-1 font-weight-bold'},
+                        'text': title_text
+                    }
+                ]
             cards = []
             for item in items[:max_count]:
                 strm_path = item.get("strm_path", "")
