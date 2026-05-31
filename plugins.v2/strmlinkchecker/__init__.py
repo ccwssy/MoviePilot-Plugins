@@ -27,7 +27,7 @@ class StrmLinkChecker(_PluginBase):
     plugin_name = "Strm失效清理"
     plugin_desc = "通过转移记录对比Emby媒体库STRM文件与源STRM文件，如果源文件已删除，同步清理Emby条目及附属文件。"
     plugin_icon = "strmcheck.png"
-    plugin_version = "1.0.8"
+    plugin_version = "1.0.9"
     plugin_author = "ccwssy"
     author_url = "https://github.com/ccwssy/MoviePilot-Plugins"
     plugin_config_prefix = "strmlinkchecker_"
@@ -497,11 +497,16 @@ class StrmLinkChecker(_PluginBase):
         def render_section(title: str, items: list, color: str, max_count: int = 20):
             if not items:
                 return []
+            total = len(items)
+            show_count = min(total, max_count)
+            title_text = f'{title} ({total})'
+            if total > max_count:
+                title_text += '（只显示部分）'
             cards = []
             for item in items[:max_count]:
                 strm_path = item.get("strm_path", "")
                 status = item.get("status", "")
-                title_text = item.get("title", "")
+                title_text_item = item.get("title", "")
                 action = item.get("action", "")
                 check_time = item.get("check_time", "")
                 cards.append({
@@ -516,7 +521,7 @@ class StrmLinkChecker(_PluginBase):
                         {
                             'component': 'VCardText',
                             'props': {'class': 'pa-0 px-2 py-1 text-caption text-grey'},
-                            'text': f'{title_text} | {action} | {check_time}'
+                            'text': f'{title_text_item} | {action} | {check_time}'
                         }
                     ]
                 })
@@ -524,7 +529,7 @@ class StrmLinkChecker(_PluginBase):
                 {
                     'component': 'div',
                     'props': {'class': 'mt-3 mb-1 font-weight-bold'},
-                    'text': f'{title} ({len(items)})'
+                    'text': title_text
                 },
                 {
                     'component': 'div',
@@ -1094,6 +1099,10 @@ class StrmLinkChecker(_PluginBase):
         保存检查记录
         """
         history = self.get_data('history') or []
+        # 如果是URL检查的最终结果，先移除同路径的"待URL检查"中间记录
+        if action.startswith("URL有效") or action.startswith("URL不可用") or action.startswith("URL检查失败"):
+            history = [h for h in history
+                       if not (h.get("strm_path") == strm_path and h.get("action") == "待URL检查")]
         history.append({
             "strm_path": strm_path,
             "source_url": source_url[:200] if source_url else "",
