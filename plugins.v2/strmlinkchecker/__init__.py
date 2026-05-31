@@ -1,4 +1,5 @@
 import os
+import random
 import re
 import time
 import threading
@@ -26,7 +27,7 @@ class StrmLinkChecker(_PluginBase):
     plugin_name = "Strm失效清理"
     plugin_desc = "通过转移记录对比Emby媒体库STRM文件与源STRM文件，如果源文件已删除，同步清理Emby条目及附属文件。"
     plugin_icon = "strmcheck.png"
-    plugin_version = "1.0.7"
+    plugin_version = "1.0.8"
     plugin_author = "ccwssy"
     author_url = "https://github.com/ccwssy/MoviePilot-Plugins"
     plugin_config_prefix = "strmlinkchecker_"
@@ -47,6 +48,14 @@ class StrmLinkChecker(_PluginBase):
     _emby_apikey = None
     _running = False
     _transferhis = None
+    # URL可用性检查（风险功能）
+    _url_check_enabled = False
+    _url_check_threads = 1
+    _url_check_cooldown = 5
+    _url_check_daily_limit = 50
+    _url_check_today_count = 0
+    _url_check_date = None
+    _url_check_count_lock = threading.Lock()
 
     def init_plugin(self, config: dict = None):
         self._transferhis = TransferHistoryOper()
@@ -65,6 +74,11 @@ class StrmLinkChecker(_PluginBase):
             self._delete_history = config.get("delete_history", False)
             self._emby_host = config.get("emby_host")
             self._emby_apikey = config.get("emby_apikey")
+            # URL可用性检查（风险功能）
+            self._url_check_enabled = config.get("url_check_enabled", False)
+            self._url_check_threads = int(config.get("url_check_threads", 1))
+            self._url_check_cooldown = int(config.get("url_check_cooldown", 5))
+            self._url_check_daily_limit = int(config.get("url_check_daily_limit", 50))
 
         if self._enabled:
             if self._onlyonce:
@@ -88,6 +102,10 @@ class StrmLinkChecker(_PluginBase):
                     "delete_history": self._delete_history,
                     "emby_host": self._emby_host,
                     "emby_apikey": self._emby_apikey,
+                    "url_check_enabled": self._url_check_enabled,
+                    "url_check_threads": self._url_check_threads,
+                    "url_check_cooldown": self._url_check_cooldown,
+                    "url_check_daily_limit": self._url_check_daily_limit,
                 })
 
             if self._scheduler and self._scheduler.get_jobs():
@@ -341,7 +359,102 @@ class StrmLinkChecker(_PluginBase):
                                 ]
                             }
                         ]
-                    }
+                    },
+                    # URL可用性检查（风险功能）
+                    {
+                        'component': 'VRow',
+                        'content': [
+                            {
+                                'component': 'VCol',
+                                'props': {'cols': 12},
+                                'content': [
+                                    {
+                                        'component': 'VAlert',
+                                        'props': {
+                                            'type': 'error',
+                                            'variant': 'tonal',
+                                            'text': '⚠️ 风险功能：URL可用性检查。启用后，对于没有转移记录的STRM文件，'
+                                                    '插件会通过HTTP请求模拟访问源链接来测试文件是否可用。'
+                                                    '此功能可能触发网盘或文件服务器的风控机制，请谨慎使用并严格控制频率。'
+                                        }
+                                    }
+                                ]
+                            }
+                        ]
+                    },
+                    {
+                        'component': 'VRow',
+                        'content': [
+                            {
+                                'component': 'VCol',
+                                'props': {'cols': 12, 'md': 3},
+                                'content': [
+                                    {
+                                        'component': 'VSwitch',
+                                        'props': {
+                                            'model': 'url_check_enabled',
+                                            'label': '启用URL可用性检查',
+                                            'color': 'error',
+                                        }
+                                    }
+                                ]
+                            },
+                            {
+                                'component': 'VCol',
+                                'props': {'cols': 12, 'md': 3},
+                                'content': [
+                                    {
+                                        'component': 'VTextField',
+                                        'props': {
+                                            'model': 'url_check_threads',
+                                            'label': '线程数',
+                                            'type': 'number',
+                                            'min': 1,
+                                            'max': 3,
+                                            'suffix': '个',
+                                            'placeholder': '1'
+                                        }
+                                    }
+                                ]
+                            },
+                            {
+                                'component': 'VCol',
+                                'props': {'cols': 12, 'md': 3},
+                                'content': [
+                                    {
+                                        'component': 'VTextField',
+                                        'props': {
+                                            'model': 'url_check_cooldown',
+                                            'label': '冷却时间',
+                                            'type': 'number',
+                                            'min': 3,
+                                            'max': 60,
+                                            'suffix': '秒',
+                                            'placeholder': '5'
+                                        }
+                                    }
+                                ]
+                            },
+                            {
+                                'component': 'VCol',
+                                'props': {'cols': 12, 'md': 3},
+                                'content': [
+                                    {
+                                        'component': 'VTextField',
+                                        'props': {
+                                            'model': 'url_check_daily_limit',
+                                            'label': '每日检查上限',
+                                            'type': 'number',
+                                            'min': 10,
+                                            'max': 500,
+                                            'suffix': '次',
+                                            'placeholder': '50'
+                                        }
+                                    }
+                                ]
+                            }
+                        ]
+                    },
                 ]
             }
         ], {
@@ -355,6 +468,10 @@ class StrmLinkChecker(_PluginBase):
             "delete_history": False,
             "emby_host": "",
             "emby_apikey": "",
+            "url_check_enabled": False,
+            "url_check_threads": 1,
+            "url_check_cooldown": 5,
+            "url_check_daily_limit": 50,
         }
 
     def get_page(self) -> List[dict]:
@@ -469,44 +586,91 @@ class StrmLinkChecker(_PluginBase):
             total_deleted_strm = 0
             total_deleted_sidecar = 0
             total_no_record = 0
+            total_url_dead = 0
+            total_url_alive = 0
+            total_url_skipped = 0
             failed_items = []
 
-            # 扫描Emby媒体库中的STRM文件
+            # URL可用性检查 - 重置每日计数（如果日期变了）
+            self.__reset_daily_url_check_count()
+
+            # 收集所有STRM文件路径
+            all_strm_files = []
             for lib_dir in strm_dirs:
                 if not os.path.isdir(lib_dir):
                     logger.warning(f"Emby媒体库STRM目录不存在: {lib_dir}")
                     continue
-
                 logger.info(f"开始扫描Emby媒体库STRM目录: {lib_dir}")
                 for root, dirs, files in os.walk(lib_dir):
                     for filename in files:
                         if not filename.lower().endswith('.strm'):
                             continue
+                        all_strm_files.append(os.path.join(root, filename))
 
-                        strm_path = os.path.join(root, filename)
-                        total_checked += 1
+            if not all_strm_files:
+                logger.info("未找到任何STRM文件")
+                return
 
-                        try:
-                            result = self.__check_single_strm(
-                                strm_path=strm_path,
-                                emby_host=emby_host,
-                                emby_apikey=emby_apikey
-                            )
-                            if result.get("dead"):
-                                total_dead += 1
-                                if result.get("emby_deleted"):
-                                    total_deleted_emby += 1
-                                if result.get("strm_deleted"):
-                                    total_deleted_strm += 1
-                                if result.get("sidecar_deleted"):
-                                    total_deleted_sidecar += 1
-                                if result.get("no_record"):
-                                    total_no_record += 1
-                                if result.get("failed"):
-                                    failed_items.append(result.get("strm_path", ""))
-                        except Exception as e:
-                            logger.error(f"检查STRM文件失败 {strm_path}: {str(e)}")
-                            failed_items.append(strm_path)
+            # 如果启用了URL检查，随机打乱顺序以降低风控特征
+            if self._url_check_enabled:
+                random.shuffle(all_strm_files)
+
+            # 用于URL检查的线程控制
+            url_check_lock = threading.Lock()
+            url_check_sem = threading.Semaphore(self._url_check_threads if self._url_check_enabled else 1)
+
+            def url_check_worker(strm_path: str):
+                """URL检查工作线程"""
+                nonlocal total_url_dead, total_url_alive, total_url_skipped
+                with url_check_sem:
+                    with self._url_check_count_lock:
+                        if self._url_check_enabled and self._url_check_today_count >= self._url_check_daily_limit:
+                            total_url_skipped += 1
+                            return
+                    try:
+                        result = self.__check_single_strm_url(strm_path)
+                        with url_check_lock:
+                            if result.get("url_dead"):
+                                total_url_dead += 1
+                            elif result.get("url_alive"):
+                                total_url_alive += 1
+                            else:
+                                total_url_skipped += 1
+                    except Exception as e:
+                        logger.error(f"URL检查失败 {strm_path}: {str(e)}")
+                        with url_check_lock:
+                            total_url_skipped += 1
+
+            # 处理每个STRM文件
+            for strm_path in all_strm_files:
+                total_checked += 1
+
+                try:
+                    result = self.__check_single_strm(
+                        strm_path=strm_path,
+                        emby_host=emby_host,
+                        emby_apikey=emby_apikey
+                    )
+                    if result.get("dead"):
+                        total_dead += 1
+                        if result.get("emby_deleted"):
+                            total_deleted_emby += 1
+                        if result.get("strm_deleted"):
+                            total_deleted_strm += 1
+                        if result.get("sidecar_deleted"):
+                            total_deleted_sidecar += 1
+                        if result.get("no_record"):
+                            total_no_record += 1
+                        if result.get("failed"):
+                            failed_items.append(result.get("strm_path", ""))
+                    # 如果启用了URL检查且无转移记录，启动URL检查
+                    if (self._url_check_enabled
+                            and result.get("no_record")
+                            and not result.get("url_checked")):
+                        url_check_worker(strm_path)
+                except Exception as e:
+                    logger.error(f"检查STRM文件失败 {strm_path}: {str(e)}")
+                    failed_items.append(strm_path)
 
             # 发送通知
             if self._notify:
@@ -523,6 +687,12 @@ class StrmLinkChecker(_PluginBase):
                 ]
                 if total_no_record > 0:
                     msg_lines.insert(4, f"     └ 无转移记录: {total_no_record} 个")
+                if self._url_check_enabled:
+                    msg_lines.append("")
+                    msg_lines.append(f"🌐 URL可用性检查")
+                    msg_lines.append(f"  ├ 链接有效: {total_url_alive} 个")
+                    msg_lines.append(f"  ├ 链接失效: {total_url_dead} 个")
+                    msg_lines.append(f"  └ 跳过(已达上限): {total_url_skipped} 个")
                 if failed_items:
                     msg_lines.append("")
                     msg_lines.append(f"⚠️ 检查失败: {len(failed_items)} 个")
@@ -559,6 +729,7 @@ class StrmLinkChecker(_PluginBase):
             "sidecar_deleted": False,
             "no_record": False,
             "failed": False,
+            "url_checked": False,
         }
 
         try:
@@ -580,8 +751,12 @@ class StrmLinkChecker(_PluginBase):
             if not transfer_his:
                 logger.warning(f"未找到转移记录: {strm_path}")
                 result["no_record"] = True
-                result["dead"] = True
-                self.__save_check_record(strm_path, "", "无转移记录", "跳过")
+                # 不标记为dead，由URL检查决定
+                if not self._url_check_enabled:
+                    result["dead"] = True
+                    self.__save_check_record(strm_path, "", "无转移记录", "跳过")
+                else:
+                    self.__save_check_record(strm_path, "", "无转移记录", "待URL检查")
                 return result
 
             # 获取源文件路径
@@ -658,6 +833,114 @@ class StrmLinkChecker(_PluginBase):
             logger.error(f"检查STRM文件异常 {strm_path}: {str(e)}")
             result["failed"] = True
             self.__save_check_record(strm_path, "", "检查失败", str(e))
+
+        return result
+
+    def __reset_daily_url_check_count(self):
+        """
+        重置每日URL检查计数（如果日期变了）
+        """
+        today = datetime.now().strftime("%Y-%m-%d")
+        if self._url_check_date != today:
+            self._url_check_today_count = 0
+            self._url_check_date = today
+
+    def __check_single_strm_url(self, strm_path: str) -> dict:
+        """
+        通过HTTP请求测试STRM文件中的URL是否可访问（无转移记录时使用）
+        严格风控：单线程、冷却时间、每日上限
+        """
+        result = {
+            "strm_path": strm_path,
+            "url_dead": False,
+            "url_alive": False,
+        }
+
+        # 检查每日上限
+        with self._url_check_count_lock:
+            if self._url_check_today_count >= self._url_check_daily_limit:
+                logger.debug(f"URL检查已达每日上限({self._url_check_daily_limit})，跳过: {strm_path}")
+                self.__save_check_record(strm_path, "", "无转移记录", "跳过(URL检查已达上限)")
+                return result
+
+        try:
+            # 读取STRM文件内容获取URL
+            with open(strm_path, 'r', encoding='utf-8', errors='ignore') as f:
+                url = f.read().strip()
+
+            if not url:
+                logger.warning(f"STRM文件内容为空: {strm_path}")
+                return result
+
+            # 执行HTTP HEAD请求（轻量级，不下载实际内容）
+            logger.info(f"URL可用性检查: {url[:100]}...")
+            headers = {
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+                              "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+                "Accept": "*/*",
+                "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
+                "Range": "bytes=0-0",  # 只请求第一个字节，最小化数据传输
+                "Connection": "close",
+            }
+
+            # 使用HEAD请求（如果服务器不支持则降级为GET + Range）
+            try:
+                resp = requests.head(
+                    url,
+                    headers=headers,
+                    timeout=15,
+                    verify=False,
+                    allow_redirects=True,
+                )
+                status_code = resp.status_code
+            except requests.exceptions.RequestException:
+                # HEAD不支持时，用GET + Range只取第一个字节
+                resp = requests.get(
+                    url,
+                    headers=headers,
+                    timeout=15,
+                    verify=False,
+                    allow_redirects=True,
+                    stream=True,
+                )
+                status_code = resp.status_code
+                resp.close()
+
+            # 2xx 或 3xx 或 416（Range请求不支持但文件存在）都视为有效
+            url_ok = status_code in [200, 201, 204, 206, 301, 302, 303, 307, 308, 416]
+
+            # 更新计数
+            with self._url_check_count_lock:
+                self._url_check_today_count += 1
+
+            if url_ok:
+                logger.info(f"URL有效 [{status_code}]: {url[:100]}...")
+                result["url_alive"] = True
+                self.__save_check_record(
+                    strm_path, url, "无转移记录",
+                    f"URL有效(HTTP {status_code})",
+                    title=Path(strm_path).stem
+                )
+            else:
+                logger.warning(f"URL不可用 [{status_code}]: {url[:100]}...")
+                result["url_dead"] = True
+                self.__save_check_record(
+                    strm_path, url, "无转移记录",
+                    f"URL不可用(HTTP {status_code})",
+                    title=Path(strm_path).stem
+                )
+
+        except Exception as e:
+            logger.error(f"URL检查异常 {strm_path}: {str(e)}")
+            with self._url_check_count_lock:
+                self._url_check_today_count += 1
+            self.__save_check_record(strm_path, "", "无转移记录", f"URL检查失败: {str(e)}")
+
+        finally:
+            # 冷却时间 - 每次请求后等待
+            if self._url_check_cooldown > 0:
+                logger.debug(f"URL检查冷却 {self._url_check_cooldown}秒...")
+                time.sleep(self._url_check_cooldown)
 
         return result
 
