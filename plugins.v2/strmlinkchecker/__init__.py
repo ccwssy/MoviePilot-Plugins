@@ -27,7 +27,7 @@ class StrmLinkChecker(_PluginBase):
     plugin_name = "Strm失效清理"
     plugin_desc = "通过转移记录对比Emby媒体库STRM文件与源STRM文件，如果源文件已删除，同步清理Emby条目及附属文件。"
     plugin_icon = "strmcheck.png"
-    plugin_version = "1.0.9"
+    plugin_version = "1.0.10"
     plugin_author = "ccwssy"
     author_url = "https://github.com/ccwssy/MoviePilot-Plugins"
     plugin_config_prefix = "strmlinkchecker_"
@@ -561,6 +561,8 @@ class StrmLinkChecker(_PluginBase):
             return
 
         self._running = True
+        # 每次执行开始时清空历史记录，只保留当次执行数据
+        self.save_data('history', [])
         try:
             if not self._strm_path:
                 logger.error("Emby媒体库STRM目录未配置")
