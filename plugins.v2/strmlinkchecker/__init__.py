@@ -13,6 +13,7 @@ from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
 
 from app.core.config import settings
+from app.core.event import eventmanager
 from app.db.transferhistory_oper import TransferHistoryOper
 from app.log import logger
 from app.plugins import _PluginBase
@@ -27,7 +28,7 @@ class StrmLinkChecker(_PluginBase):
     plugin_name = "Strm失效清理"
     plugin_desc = "通过转移记录对比Emby媒体库STRM文件与源STRM文件，如果源文件已删除，同步清理Emby条目及附属文件。"
     plugin_icon = "strmcheck.png"
-    plugin_version = "1.0.10"
+    plugin_version = "1.0.11"
     plugin_author = "ccwssy"
     author_url = "https://github.com/ccwssy/MoviePilot-Plugins"
     plugin_config_prefix = "strmlinkchecker_"
@@ -82,15 +83,12 @@ class StrmLinkChecker(_PluginBase):
 
         if self._enabled:
             if self._onlyonce:
-                self._scheduler = BackgroundScheduler(timezone=settings.TZ)
-                logger.info(f"STRM源链接检查服务启动，立即运行一次")
-                self._scheduler.add_job(
-                    func=self.__check_all,
-                    trigger='date',
-                    run_date=datetime.now(tz=pytz.timezone(settings.TZ)) + timedelta(seconds=3),
-                    name="STRM源链接检查"
-                )
                 self._onlyonce = False
+                # 先启动检查线程，再保存配置（避免update_config触发重载导致线程被销毁）
+                logger.info(f"STRM源链接检查服务启动，立即运行一次")
+                self._running = False
+                check_thread = threading.Thread(target=self.__check_all)
+                check_thread.start()
                 self.update_config({
                     "onlyonce": False,
                     "cron": self._cron,
@@ -141,8 +139,12 @@ class StrmLinkChecker(_PluginBase):
     def api_run_check(self, apikey: str):
         if apikey != settings.API_TOKEN:
             return {"success": False, "message": "API密钥错误"}
+        logger.info("api_run_check 被调用，准备启动检查线程")
+        # 重置运行标志，确保检查可以执行
+        self._running = False
         thread = threading.Thread(target=self.__check_all)
         thread.start()
+        logger.info("api_run_check 检查线程已启动")
         return {"success": True, "message": "检查任务已启动"}
 
     def get_service(self) -> List[Dict[str, Any]]:
@@ -514,6 +516,7 @@ class StrmLinkChecker(_PluginBase):
                 title_text_item = item.get("title", "")
                 action = item.get("action", "")
                 check_time = item.get("check_time", "")
+                # 简化显示：只显示文件名和action
                 cards.append({
                     'component': 'VCard',
                     'props': {'class': f'border-left-{color}'},
@@ -556,13 +559,17 @@ class StrmLinkChecker(_PluginBase):
         """
         检查所有STRM文件
         """
+        logger.info("__check_all 被调用，开始执行STRM源链接检查")
         if self._running:
             logger.warning("STRM源链接检查任务正在运行中，跳过本次执行")
             return
 
         self._running = True
+        logger.info("__check_all 开始执行，清空历史记录")
         # 每次执行开始时清空历史记录，只保留当次执行数据
         self.save_data('history', [])
+        # 用于等待URL检查线程完成
+        url_threads = []
         try:
             if not self._strm_path:
                 logger.error("Emby媒体库STRM目录未配置")
@@ -639,13 +646,13 @@ class StrmLinkChecker(_PluginBase):
                     with self._url_check_count_lock:
                         if self._url_check_enabled and self._url_check_today_count >= self._url_check_daily_limit:
                             total_url_skipped += 1
+                            # 记录跳过原因
+                            self.__save_check_record(strm_path, "", "无转移记录", "跳过(URL检查已达上限)")
                             return
                     try:
                         result = self.__check_single_strm_url(strm_path)
                         with url_check_lock:
-                            if result.get("cached"):
-                                total_url_cached += 1
-                            elif result.get("url_dead"):
+                            if result.get("url_dead"):
                                 total_url_dead += 1
                             elif result.get("url_alive"):
                                 total_url_alive += 1
@@ -682,10 +689,44 @@ class StrmLinkChecker(_PluginBase):
                     if (self._url_check_enabled
                             and result.get("no_record")
                             and not result.get("url_checked")):
-                        url_check_worker(strm_path)
+                        # 先检查缓存，如果缓存命中则直接跳过，不启动线程
+                        cache = self.get_data('url_check_cache') or {}
+                        cached_entry = cache.get(strm_path)
+                        if cached_entry:
+                            try:
+                                current_mtime = os.path.getmtime(strm_path)
+                            except OSError:
+                                current_mtime = 0
+                            cached_mtime = cached_entry.get("mtime", 0)
+                            if abs(cached_mtime - current_mtime) < 0.001:
+                                cached_status = cached_entry.get("status", "未知")
+                                total_url_cached += 1
+                                # 覆盖之前保存的"待URL检查"记录
+                                history = self.get_data('history') or []
+                                history = [h for h in history
+                                           if not (h.get("strm_path") == strm_path
+                                                   and h.get("action") == "待URL检查")]
+                                history.append({
+                                    "strm_path": strm_path,
+                                    "source_url": "",
+                                    "status": "无转移记录",
+                                    "action": f"跳过(缓存命中,上次状态:{cached_status})",
+                                    "title": "",
+                                    "check_time": time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
+                                })
+                                self.save_data('history', history)
+                                continue
+                        # 缓存未命中，启动URL检查线程
+                        t = threading.Thread(target=url_check_worker, args=(strm_path,))
+                        t.start()
+                        url_threads.append(t)
                 except Exception as e:
                     logger.error(f"检查STRM文件失败 {strm_path}: {str(e)}")
                     failed_items.append(strm_path)
+
+            # 等待所有URL检查线程完成
+            for t in url_threads:
+                t.join(timeout=300)
 
             # 发送通知
             if self._notify:
@@ -888,6 +929,7 @@ class StrmLinkChecker(_PluginBase):
                 logger.debug(f"URL检查缓存命中，跳过: {strm_path}")
                 result["cached"] = True
                 cached_status = cached_entry.get("status", "未知")
+                result["cached_status"] = cached_status
                 if cached_status == "有效":
                     result["url_alive"] = True
                 elif cached_status == "失效":
@@ -1106,8 +1148,10 @@ class StrmLinkChecker(_PluginBase):
         保存检查记录
         """
         history = self.get_data('history') or []
-        # 如果是URL检查的最终结果，先移除同路径的"待URL检查"中间记录
-        if action.startswith("URL有效") or action.startswith("URL不可用") or action.startswith("URL检查失败"):
+        # 如果是URL检查的最终结果或缓存跳过，先移除同路径的"待URL检查"中间记录
+        if (action.startswith("URL有效") or action.startswith("URL不可用") 
+                or action.startswith("URL检查失败") or action.startswith("跳过(缓存命中)")
+                or action.startswith("跳过(URL检查已达上限)")):
             history = [h for h in history
                        if not (h.get("strm_path") == strm_path and h.get("action") == "待URL检查")]
         history.append({
@@ -1119,8 +1163,28 @@ class StrmLinkChecker(_PluginBase):
             "check_time": time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
         })
         if len(history) > 500:
-            history = history[-500:]
+            # 截断时优先保留重要记录：源文件缺失 > 检查失败 > 无转移记录 > 有效
+            # 按优先级排序后保留前500条
+            priority = {"源文件缺失": 0, "检查失败": 1, "无转移记录": 2, "无源路径": 2, "有效": 3}
+            history.sort(key=lambda h: (
+                priority.get(h.get("status", ""), 9),
+                h.get("check_time", "")
+            ))
+            history = history[:500]
+            # 恢复按时间倒序（数据看板按时间倒序展示）
+            history.sort(key=lambda h: h.get("check_time", ""), reverse=True)
         self.save_data('history', history)
+
+    @eventmanager.register(EventType.PluginAction)
+    def serve(self, event, **kwargs):
+        """
+        处理插件事件
+        """
+        if event and event.get("action") == "strm_check":
+            logger.info("收到 /strm_check 命令，开始执行STRM源链接检查")
+            self._running = False
+            thread = threading.Thread(target=self.__check_all)
+            thread.start()
 
     def stop_service(self):
         """
