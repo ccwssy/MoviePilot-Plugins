@@ -28,7 +28,7 @@ class StrmLinkChecker(_PluginBase):
     plugin_name = "Strm失效清理"
     plugin_desc = "通过转移记录对比Emby媒体库STRM文件与源STRM文件，如果源文件已删除，同步清理Emby条目及附属文件。"
     plugin_icon = "strmcheck.png"
-    plugin_version = "1.0.11"
+    plugin_version = "1.0.12"
     plugin_author = "ccwssy"
     author_url = "https://github.com/ccwssy/MoviePilot-Plugins"
     plugin_config_prefix = "strmlinkchecker_"
@@ -791,19 +791,40 @@ class StrmLinkChecker(_PluginBase):
 
         try:
             # 通过转移记录查找源文件路径
+            # 注意：get_by_dest 返回最早匹配的记录（.first()），
+            # 当同一 dest 被多次覆盖整理时，最早记录的 src 可能指向已被删除的旧文件。
+            # 因此需要检查是否有同 dest 的更新记录，取最新的（ID最大的）。
             transfer_his = self._transferhis.get_by_dest(dest=strm_path)
+            if transfer_his:
+                # 查找同 dest 的最新记录（按 ID 降序）
+                from app.db.models.transferhistory import TransferHistory
+                from app.db import ScopedSession
+                _db = ScopedSession()
+                try:
+                    latest = _db.query(TransferHistory)\
+                        .filter(TransferHistory.dest == strm_path)\
+                        .order_by(TransferHistory.id.desc())\
+                        .first()
+                    if latest and latest.id != transfer_his.id:
+                        logger.debug(f"同dest存在更新记录(ID={latest.id})，替换旧记录(ID={transfer_his.id})")
+                        transfer_his = latest
+                finally:
+                    _db.close()
             if not transfer_his:
                 # 尝试用文件名模糊匹配
                 strm_name = Path(strm_path).stem
                 transfer_his_list = self._transferhis.get_by_title(strm_name)
                 if transfer_his_list:
-                    # 取dest路径最匹配的
+                    # 取dest路径最匹配的，且取最新的（ID最大的）
+                    matched = None
                     for th in transfer_his_list:
                         if th.dest and th.dest == strm_path:
-                            transfer_his = th
-                            break
-                    if not transfer_his:
-                        transfer_his = transfer_his_list[0]
+                            if matched is None or th.id > matched.id:
+                                matched = th
+                    if not matched:
+                        # 没有精确匹配dest的，取ID最大的
+                        matched = max(transfer_his_list, key=lambda x: x.id or 0)
+                    transfer_his = matched
 
             if not transfer_his:
                 logger.warning(f"未找到转移记录: {strm_path}")
