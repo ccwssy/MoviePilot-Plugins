@@ -28,7 +28,7 @@ class StrmLinkChecker(_PluginBase):
     plugin_name = "Strm失效清理"
     plugin_desc = "通过转移记录对比Emby媒体库STRM文件与源STRM文件，如果源文件已删除，同步清理Emby条目及附属文件。"
     plugin_icon = "strmcheck.png"
-    plugin_version = "1.0.11"
+    plugin_version = "1.0.12"
     plugin_author = "ccwssy"
     author_url = "https://github.com/ccwssy/MoviePilot-Plugins"
     plugin_config_prefix = "strmlinkchecker_"
@@ -797,13 +797,16 @@ class StrmLinkChecker(_PluginBase):
                 strm_name = Path(strm_path).stem
                 transfer_his_list = self._transferhis.get_by_title(strm_name)
                 if transfer_his_list:
-                    # 取dest路径最匹配的
+                    # 优先取dest精确匹配的，否则取最新记录
                     for th in transfer_his_list:
                         if th.dest and th.dest == strm_path:
                             transfer_his = th
                             break
                     if not transfer_his:
-                        transfer_his = transfer_his_list[0]
+                        # 按日期降序排序，取最新记录
+                        transfer_his = sorted(transfer_his_list,
+                                              key=lambda x: x.date or "",
+                                              reverse=True)[0]
 
             if not transfer_his:
                 logger.warning(f"未找到转移记录: {strm_path}")
