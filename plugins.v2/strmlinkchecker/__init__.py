@@ -28,7 +28,7 @@ class StrmLinkChecker(_PluginBase):
     plugin_name = "Strm失效清理"
     plugin_desc = "通过转移记录对比Emby媒体库STRM文件与源STRM文件，如果源文件已删除，同步清理Emby条目及附属文件。"
     plugin_icon = "strmcheck.png"
-    plugin_version = "1.1.2"
+    plugin_version = "1.1.3"
     plugin_author = "ccwssy"
     author_url = "https://github.com/ccwssy/MoviePilot-Plugins"
     plugin_config_prefix = "strmlinkchecker_"
@@ -960,29 +960,10 @@ class StrmLinkChecker(_PluginBase):
 
             db = SessionFactory()
             try:
-                # 策略1：通过tmdbid+type+seasons+episodes判断
-                tmdbid = transfer_his.tmdbid
-                mtype = transfer_his.type
-                seasons = transfer_his.seasons
-                episodes = transfer_his.episodes
-
-                if tmdbid and mtype:
-                    query = db.query(TransferHistory).filter(
-                        TransferHistory.tmdbid == tmdbid,
-                        TransferHistory.type == mtype,
-                        TransferHistory.dest.isnot(None),
-                        TransferHistory.dest.like('%.strm')
-                    )
-                    if seasons:
-                        query = query.filter(TransferHistory.seasons == seasons)
-                    if episodes:
-                        query = query.filter(TransferHistory.episodes == episodes)
-                    all_records = query.all()
-                else:
-                    all_records = []
-
-                # 策略2：如果tmdbid缺失或策略1没找到重复，通过精确的src路径判断
-                if len(all_records) < 2 and transfer_his.src:
+                # 通过精确的src路径判断是否为同一个源文件的重复入库
+                # 不同版本（如DV和HDR）的src路径不同，不会被误删
+                all_records = []
+                if transfer_his.src:
                     all_records = db.query(TransferHistory).filter(
                         TransferHistory.src == transfer_his.src,
                         TransferHistory.dest.isnot(None),
