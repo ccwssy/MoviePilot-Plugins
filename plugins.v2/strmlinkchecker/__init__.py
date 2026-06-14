@@ -28,7 +28,7 @@ class StrmLinkChecker(_PluginBase):
     plugin_name = "Strm失效清理"
     plugin_desc = "通过转移记录对比Emby媒体库STRM文件与源STRM文件，如果源文件已删除，同步清理Emby条目及附属文件。"
     plugin_icon = "strmcheck.png"
-    plugin_version = "1.0.12"
+    plugin_version = "1.1.4"
     plugin_author = "ccwssy"
     author_url = "https://github.com/ccwssy/MoviePilot-Plugins"
     plugin_config_prefix = "strmlinkchecker_"
@@ -490,11 +490,12 @@ class StrmLinkChecker(_PluginBase):
 
         # 按状态分类
         valid_items = [h for h in history if h.get('status') == '有效']
+        duplicate_items = [h for h in history if h.get('status') == '重复入库(旧版本)']
         no_record_items = [h for h in history if h.get('status') == '无转移记录' or h.get('status') == '无源路径']
         dead_items = [h for h in history if h.get('status') == '源文件缺失']
         failed_items = [h for h in history if h.get('status') == '检查失败']
-        other_items = [h for h in history if h not in valid_items and h not in no_record_items
-                       and h not in dead_items and h not in failed_items]
+        other_items = [h for h in history if h not in valid_items and h not in duplicate_items
+                       and h not in no_record_items and h not in dead_items and h not in failed_items]
 
         def render_section(title: str, items: list, color: str, max_count: int = 20):
             total = len(items)
@@ -547,11 +548,12 @@ class StrmLinkChecker(_PluginBase):
             ]
 
         sections = []
-        sections.extend(render_section('✅ 有效', valid_items, 'success', 10))
+        sections.extend(render_section('🔄 重复入库清理', duplicate_items, 'warning', 20))
         sections.extend(render_section('⚠️ 无转移记录', no_record_items, 'warning', 20))
         sections.extend(render_section('❌ 源文件缺失', dead_items, 'error', 50))
         sections.extend(render_section('💥 检查失败', failed_items, 'error', 20))
         sections.extend(render_section('📋 其他', other_items, 'grey', 20))
+        sections.extend(render_section('✅ 有效', valid_items, 'success', 10))
 
         return sections
 
@@ -605,6 +607,9 @@ class StrmLinkChecker(_PluginBase):
             total_deleted_strm = 0
             total_deleted_sidecar = 0
             total_no_record = 0
+            total_duplicate = 0
+            total_duplicate_emby = 0
+            total_duplicate_strm = 0
             total_url_dead = 0
             total_url_alive = 0
             total_url_skipped = 0
@@ -673,7 +678,13 @@ class StrmLinkChecker(_PluginBase):
                         emby_host=emby_host,
                         emby_apikey=emby_apikey
                     )
-                    if result.get("dead"):
+                    if result.get("duplicate_removed"):
+                        total_duplicate += 1
+                        if result.get("emby_deleted"):
+                            total_duplicate_emby += 1
+                        if result.get("strm_deleted"):
+                            total_duplicate_strm += 1
+                    elif result.get("dead"):
                         total_dead += 1
                         if result.get("emby_deleted"):
                             total_deleted_emby += 1
@@ -743,6 +754,12 @@ class StrmLinkChecker(_PluginBase):
                 ]
                 if total_no_record > 0:
                     msg_lines.insert(4, f"     └ 无转移记录: {total_no_record} 个")
+                if total_duplicate > 0:
+                    msg_lines.append("")
+                    msg_lines.append(f"🔄 重复入库清理")
+                    msg_lines.append(f"  ├ 清理重复文件: {total_duplicate} 个")
+                    msg_lines.append(f"  ├ 删除 Emby 条目: {total_duplicate_emby} 个")
+                    msg_lines.append(f"  └ 删除 STRM 文件: {total_duplicate_strm} 个")
                 if self._url_check_enabled:
                     msg_lines.append("")
                     msg_lines.append(f"🌐 URL可用性检查")
@@ -766,7 +783,8 @@ class StrmLinkChecker(_PluginBase):
                         f"源文件缺失{total_dead}个(无记录{total_no_record}), "
                         f"删除Emby{total_deleted_emby}个, "
                         f"删除STRM{total_deleted_strm}个, "
-                        f"删除附属文件{total_deleted_sidecar}个")
+                        f"删除附属文件{total_deleted_sidecar}个, "
+                        f"重复入库清理{total_duplicate}个")
 
         except Exception as e:
             logger.error(f"STRM源文件检查异常: {str(e)}")
@@ -787,6 +805,7 @@ class StrmLinkChecker(_PluginBase):
             "no_record": False,
             "failed": False,
             "url_checked": False,
+            "duplicate_removed": False,
         }
 
         try:
@@ -797,13 +816,20 @@ class StrmLinkChecker(_PluginBase):
                 strm_name = Path(strm_path).stem
                 transfer_his_list = self._transferhis.get_by_title(strm_name)
                 if transfer_his_list:
-                    # 优先取dest精确匹配的，否则取最新记录
+                    # 优先取dest精确匹配的
                     for th in transfer_his_list:
                         if th.dest and th.dest == strm_path:
                             transfer_his = th
                             break
                     if not transfer_his:
-                        # 按日期降序排序，取最新记录
+                        # 其次取dest文件名匹配的（不同路径但文件名相同）
+                        dest_filename = Path(strm_path).name
+                        for th in transfer_his_list:
+                            if th.dest and Path(th.dest).name == dest_filename:
+                                transfer_his = th
+                                break
+                    if not transfer_his:
+                        # 最后按日期降序排序，取最新记录
                         transfer_his = sorted(transfer_his_list,
                                               key=lambda x: x.date or "",
                                               reverse=True)[0]
@@ -829,6 +855,20 @@ class StrmLinkChecker(_PluginBase):
                 return result
 
             title = transfer_his.title or ""
+
+            # 无论源文件是否存在，都先检查是否有同源的重复入库
+            dup_result = self.__check_duplicate_strm(
+                strm_path=strm_path,
+                transfer_his=transfer_his,
+                emby_host=emby_host,
+                emby_apikey=emby_apikey
+            )
+            if dup_result.get("duplicate_removed"):
+                result["duplicate_removed"] = True
+                result["emby_deleted"] = dup_result.get("emby_deleted", False)
+                result["strm_deleted"] = dup_result.get("strm_deleted", False)
+                result["sidecar_deleted"] = dup_result.get("sidecar_deleted", False)
+                return result
 
             # 检查源文件是否存在
             if os.path.exists(src_path):
@@ -893,6 +933,142 @@ class StrmLinkChecker(_PluginBase):
             logger.error(f"检查STRM文件异常 {strm_path}: {str(e)}")
             result["failed"] = True
             self.__save_check_record(strm_path, "", "检查失败", str(e))
+
+        return result
+
+    def __check_duplicate_strm(self, strm_path: str,
+                               transfer_his,
+                               emby_host: str,
+                               emby_apikey: str) -> dict:
+        """
+        检查是否有同媒体同集的重复入库STRM文件。
+        判断逻辑：
+        1. 优先通过tmdbid+type+seasons+episodes判断同一媒体同一集
+        2. 如果tmdbid缺失，则通过src文件名（去掉路径）判断是否是同一个物理源文件
+        对于同一组中多个不同的dest，只保留最新date的那条，删除其他旧的重复入库文件。
+        """
+        result = {
+            "duplicate_removed": False,
+            "emby_deleted": False,
+            "strm_deleted": False,
+            "sidecar_deleted": False,
+        }
+
+        try:
+            from app.db import SessionFactory
+            from app.db.models.transferhistory import TransferHistory
+
+            db = SessionFactory()
+            try:
+                # 策略1：通过tmdbid+type+seasons+episodes判断
+                tmdbid = transfer_his.tmdbid
+                mtype = transfer_his.type
+                seasons = transfer_his.seasons
+                episodes = transfer_his.episodes
+
+                if tmdbid and mtype:
+                    query = db.query(TransferHistory).filter(
+                        TransferHistory.tmdbid == tmdbid,
+                        TransferHistory.type == mtype,
+                        TransferHistory.dest.isnot(None),
+                        TransferHistory.dest.like('%.strm')
+                    )
+                    if seasons:
+                        query = query.filter(TransferHistory.seasons == seasons)
+                    if episodes:
+                        query = query.filter(TransferHistory.episodes == episodes)
+                    all_records = query.all()
+                else:
+                    all_records = []
+
+                # 策略2：如果tmdbid缺失或策略1没找到重复，通过精确的src路径判断
+                if len(all_records) < 2 and transfer_his.src:
+                    all_records = db.query(TransferHistory).filter(
+                        TransferHistory.src == transfer_his.src,
+                        TransferHistory.dest.isnot(None),
+                        TransferHistory.dest.like('%.strm')
+                    ).all()
+            finally:
+                db.close()
+
+            if len(all_records) < 2:
+                return result
+
+            # 按date降序排序，取最新记录
+            sorted_records = sorted(all_records,
+                                    key=lambda x: x.date or "",
+                                    reverse=True)
+            latest_record = sorted_records[0]
+
+            # 如果当前记录就是最新的，不做任何操作
+            if latest_record.id == transfer_his.id:
+                return result
+
+            # 当前记录不是最新的，说明当前STRM文件是旧版本的重复入库
+            # 检查当前dest文件是否还存在
+            if not os.path.exists(strm_path):
+                logger.debug(f"重复入库的STRM文件已不存在，跳过: {strm_path}")
+                return result
+
+            logger.warning(f"发现重复入库STRM文件(旧版本): {strm_path}")
+            logger.warning(f"  最新版本: {latest_record.dest} (id={latest_record.id}, date={latest_record.date})")
+            logger.warning(f"  当前版本: {strm_path} (id={transfer_his.id}, date={transfer_his.date})")
+
+            # 通过Emby API删除该STRM文件对应的单个条目
+            emby_ok = self.__delete_emby_item_by_path(
+                emby_host=emby_host,
+                emby_apikey=emby_apikey,
+                strm_path=strm_path
+            )
+            if emby_ok:
+                result["emby_deleted"] = True
+
+            # 删除整理记录
+            if self._delete_history:
+                try:
+                    self._transferhis.delete(transfer_his.id)
+                    logger.info(f"已删除重复入库的整理记录: {transfer_his.id}")
+                except Exception as e:
+                    logger.error(f"删除整理记录失败: {e}")
+
+            # 删除附属文件（jpg/nfo）
+            if self._delete_sidecar:
+                sidecar_deleted = self.__delete_sidecar_files(strm_path)
+                if sidecar_deleted:
+                    result["sidecar_deleted"] = True
+
+            # 删除STRM文件
+            if self._delete_strm:
+                try:
+                    os.remove(strm_path)
+                    logger.info(f"已删除重复入库STRM文件: {strm_path}")
+                    result["strm_deleted"] = True
+                    self.__remove_empty_parent(Path(strm_path).parent)
+                except Exception as e:
+                    logger.error(f"删除STRM文件失败: {strm_path}: {e}")
+
+            action_parts = []
+            if result["emby_deleted"]:
+                action_parts.append("已删除Emby条目")
+            if result["strm_deleted"]:
+                action_parts.append("已删除STRM文件")
+            if result["sidecar_deleted"]:
+                action_parts.append("已删除附属文件")
+            if not action_parts:
+                action_parts.append("未操作(仅报告)")
+
+            self.__save_check_record(
+                strm_path,
+                transfer_his.src or "",
+                "重复入库(旧版本)",
+                ", ".join(action_parts),
+                title=transfer_his.title or ""
+            )
+
+            result["duplicate_removed"] = True
+
+        except Exception as e:
+            logger.error(f"检查重复入库STRM文件异常 {strm_path}: {str(e)}")
 
         return result
 
