@@ -28,7 +28,7 @@ class StrmLinkChecker(_PluginBase):
     plugin_name = "Strm失效清理"
     plugin_desc = "通过转移记录对比Emby媒体库STRM文件与源STRM文件，如果源文件已删除，同步清理Emby条目及附属文件。"
     plugin_icon = "strmcheck.png"
-    plugin_version = "1.1.3"
+    plugin_version = "1.2.1"
     plugin_author = "ccwssy"
     author_url = "https://github.com/ccwssy/MoviePilot-Plugins"
     plugin_config_prefix = "strmlinkchecker_"
@@ -57,6 +57,8 @@ class StrmLinkChecker(_PluginBase):
     _url_check_today_count = 0
     _url_check_date = None
     _url_check_count_lock = threading.Lock()
+    # URL缓存有效期（天），0表示无限期
+    _url_check_cache_expiry = 0
 
     def init_plugin(self, config: dict = None):
         self._transferhis = TransferHistoryOper()
@@ -80,6 +82,7 @@ class StrmLinkChecker(_PluginBase):
             self._url_check_threads = int(config.get("url_check_threads", 1))
             self._url_check_cooldown = int(config.get("url_check_cooldown", 5))
             self._url_check_daily_limit = int(config.get("url_check_daily_limit", 50))
+            self._url_check_cache_expiry = int(config.get("url_check_cache_expiry", 0))
 
         if self._enabled:
             if self._onlyonce:
@@ -104,6 +107,7 @@ class StrmLinkChecker(_PluginBase):
                     "url_check_threads": self._url_check_threads,
                     "url_check_cooldown": self._url_check_cooldown,
                     "url_check_daily_limit": self._url_check_daily_limit,
+                    "url_check_cache_expiry": self._url_check_cache_expiry,
                 })
 
             if self._scheduler and self._scheduler.get_jobs():
@@ -454,6 +458,43 @@ class StrmLinkChecker(_PluginBase):
                                         }
                                     }
                                 ]
+                            },
+                            {
+                                'component': 'VCol',
+                                'props': {'cols': 12, 'md': 3},
+                                'content': [
+                                    {
+                                        'component': 'VTextField',
+                                        'props': {
+                                            'model': 'url_check_cache_expiry',
+                                            'label': '缓存有效期',
+                                            'type': 'number',
+                                            'min': 0,
+                                            'suffix': '天',
+                                            'placeholder': '0'
+                                        }
+                                    }
+                                ]
+                            }
+                        ]
+                    },
+                    {
+                        'component': 'VRow',
+                        'content': [
+                            {
+                                'component': 'VCol',
+                                'props': {'cols': 12},
+                                'content': [
+                                    {
+                                        'component': 'VAlert',
+                                        'props': {
+                                            'type': 'info',
+                                            'variant': 'tonal',
+                                            'text': '缓存有效期：URL检查结果缓存的天数。超过有效期后，下次检查会重新发起URL请求。'
+                                                    '设为0表示无限期（仅当STRM文件mtime变化时才重新检查）。'
+                                        }
+                                    }
+                                ]
                             }
                         ]
                     },
@@ -474,6 +515,7 @@ class StrmLinkChecker(_PluginBase):
             "url_check_threads": 1,
             "url_check_cooldown": 5,
             "url_check_daily_limit": 50,
+            "url_check_cache_expiry": 0,
         }
 
     def get_page(self) -> List[dict]:
@@ -709,7 +751,18 @@ class StrmLinkChecker(_PluginBase):
                             except OSError:
                                 current_mtime = 0
                             cached_mtime = cached_entry.get("mtime", 0)
-                            if abs(cached_mtime - current_mtime) < 0.001:
+                            # 检查缓存是否在有效期内
+                            cache_expired = False
+                            if self._url_check_cache_expiry > 0:
+                                checked_at_str = cached_entry.get("checked_at", "")
+                                if checked_at_str:
+                                    try:
+                                        checked_at = datetime.strptime(checked_at_str, "%Y-%m-%d %H:%M:%S")
+                                        if (datetime.now() - checked_at).days >= self._url_check_cache_expiry:
+                                            cache_expired = True
+                                    except ValueError:
+                                        pass
+                            if not cache_expired and abs(cached_mtime - current_mtime) < 0.001:
                                 cached_status = cached_entry.get("status", "未知")
                                 total_url_cached += 1
                                 # 覆盖之前保存的"待URL检查"记录
