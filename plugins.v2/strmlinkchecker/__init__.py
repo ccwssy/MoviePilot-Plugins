@@ -169,108 +169,7 @@ class StrmLinkChecker(_PluginBase):
             {
                 'component': 'VForm',
                 'content': [
-                    {
-                        'component': 'VRow',
-                        'content': [
-                            {
-                                'component': 'VCol',
-                                'props': {'cols': 12, 'md': 3},
-                                'content': [
-                                    {
-                                        'component': 'VSwitch',
-                                        'props': {
-                                            'model': 'enabled',
-                                            'label': '启用插件',
-                                        }
-                                    }
-                                ]
-                            },
-                            {
-                                'component': 'VCol',
-                                'props': {'cols': 12, 'md': 3},
-                                'content': [
-                                    {
-                                        'component': 'VSwitch',
-                                        'props': {
-                                            'model': 'notify',
-                                            'label': '发送通知',
-                                        }
-                                    }
-                                ]
-                            },
-                            {
-                                'component': 'VCol',
-                                'props': {'cols': 12, 'md': 3},
-                                'content': [
-                                    {
-                                        'component': 'VSwitch',
-                                        'props': {
-                                            'model': 'delete_strm',
-                                            'label': '删除失效STRM',
-                                        }
-                                    }
-                                ]
-                            },
-                            {
-                                'component': 'VCol',
-                                'props': {'cols': 12, 'md': 3},
-                                'content': [
-                                    {
-                                        'component': 'VSwitch',
-                                        'props': {
-                                            'model': 'delete_sidecar',
-                                            'label': '删除附属文件(jpg/nfo)',
-                                        }
-                                    }
-                                ]
-                            }
-                        ]
-                    },
-                    {
-                        'component': 'VRow',
-                        'content': [
-                            {
-                                'component': 'VCol',
-                                'props': {'cols': 12, 'md': 4},
-                                'content': [
-                                    {
-                                        'component': 'VSwitch',
-                                        'props': {
-                                            'model': 'delete_history',
-                                            'label': '删除整理记录',
-                                        }
-                                    }
-                                ]
-                            },
-                            {
-                                'component': 'VCol',
-                                'props': {'cols': 12, 'md': 4},
-                                'content': [
-                                    {
-                                        'component': 'VTextField',
-                                        'props': {
-                                            'model': 'cron',
-                                            'label': '执行周期(cron)',
-                                            'placeholder': '5位cron表达式，如 0 6 * * *'
-                                        }
-                                    }
-                                ]
-                            },
-                            {
-                                'component': 'VCol',
-                                'props': {'cols': 12, 'md': 4},
-                                'content': [
-                                    {
-                                        'component': 'VSwitch',
-                                        'props': {
-                                            'model': 'onlyonce',
-                                            'label': '立即运行一次',
-                                        }
-                                    }
-                                ]
-                            }
-                        ]
-                    },
+                    # ===== 基础设置 =====
                     {
                         'component': 'VRow',
                         'content': [
@@ -279,205 +178,129 @@ class StrmLinkChecker(_PluginBase):
                                 'props': {'cols': 12},
                                 'content': [
                                     {
-                                        'component': 'VTextarea',
-                                        'props': {
-                                            'model': 'strm_path',
-                                            'rows': '2',
-                                            'label': 'MP2入库后的STRM目录路径',
-                                            'placeholder': 'MP2容器内看到的入库STRM文件目录，如 /clouddata/movies/云盘（一行一个目录）'
-                                        }
+                                        'component': 'VCard',
+                                        'props': {'variant': 'outlined'},
+                                        'content': [
+                                            {
+                                                'component': 'VCardTitle',
+                                                'props': {'class': 'pa-4 pb-0'},
+                                                'content': [
+                                                    {
+                                                        'component': 'VRow',
+                                                        'props': {'dense': True},
+                                                        'content': [
+                                                            {
+                                                                'component': 'VCol',
+                                                                'props': {'cols': 12, 'md': 4, 'sm': 4},
+                                                                'content': [
+                                                                    {
+                                                                        'component': 'VSwitch',
+                                                                        'props': {
+                                                                            'model': 'enabled',
+                                                                            'label': '⚙️ 启用插件',
+                                                                            'color': 'primary',
+                                                                            'hideDetails': True,
+                                                                            'density': 'compact'
+                                                                        }
+                                                                    }
+                                                                ]
+                                                            },
+                                                            {
+                                                                'component': 'VCol',
+                                                                'props': {'cols': 12, 'md': 4, 'sm': 4},
+                                                                'content': [
+                                                                    {
+                                                                        'component': 'VSwitch',
+                                                                        'props': {
+                                                                            'model': 'onlyonce',
+                                                                            'label': '立即运行一次',
+                                                                            'color': 'primary',
+                                                                            'hideDetails': True,
+                                                                            'density': 'compact'
+                                                                        }
+                                                                    }
+                                                                ]
+                                                            },
+                                                            {
+                                                                'component': 'VCol',
+                                                                'props': {'cols': 12, 'md': 4, 'sm': 4},
+                                                                'content': [
+                                                                    {
+                                                                        'component': 'VSwitch',
+                                                                        'props': {
+                                                                            'model': 'notify',
+                                                                            'label': '发送通知',
+                                                                            'color': 'primary',
+                                                                            'hideDetails': True,
+                                                                            'density': 'compact'
+                                                                        }
+                                                                    }
+                                                                ]
+                                                            }
+                                                        ]
+                                                    }
+                                                ]
+                                            },
+                                            {
+                                                'component': 'VCardText',
+                                                'props': {'class': 'pa-4 pt-4'},
+                                                'content': [
+                                                    {
+                                                        'component': 'VRow',
+                                                        'content': [
+                                                            {
+                                                                'component': 'VCol',
+                                                                'props': {'cols': 12, 'md': 8, 'offset-md': 2},
+                                                                'content': [
+                                                                    {
+                                                                        'component': 'VTextField',
+                                                                        'props': {
+                                                                            'model': 'cron',
+                                                                            'label': '执行周期',
+                                                                            'placeholder': '5位cron表达式，如 0 6 * * *',
+                                                                            'hideDetails': True,
+                                                                            'density': 'compact',
+                                                                            'persistentHint': True,
+                                                                            'hint': '留空则仅手动触发'
+                                                                        }
+                                                                    }
+                                                                ]
+                                                            }
+                                                        ]
+                                                    },
+                                                    {
+                                                        'component': 'VRow',
+                                                        'content': [
+                                                            {
+                                                                'component': 'VCol',
+                                                                'props': {'cols': 12, 'md': 8, 'offset-md': 2},
+                                                                'content': [
+                                                                    {
+                                                                        'component': 'VTextarea',
+                                                                        'props': {
+                                                                            'model': 'strm_path',
+                                                                            'label': 'STRM目录路径',
+                                                                            'rows': 3,
+                                                                            'hideDetails': True,
+                                                                            'density': 'compact',
+                                                                            'placeholder': '/clouddata/movies/云盘（一行一个目录）',
+                                                                            'persistentHint': True,
+                                                                            'hint': 'MP2容器内入库后的STRM文件目录，支持多行'
+                                                                        }
+                                                                    }
+                                                                ]
+                                                            }
+                                                        ]
+                                                    }
+                                                ]
+                                            }
+                                        ]
                                     }
                                 ]
                             }
                         ]
                     },
-                    {
-                        'component': 'VRow',
-                        'content': [
-                            {
-                                'component': 'VCol',
-                                'props': {'cols': 12, 'md': 6},
-                                'content': [
-                                    {
-                                        'component': 'VTextField',
-                                        'props': {
-                                            'model': 'emby_host',
-                                            'label': 'Emby地址',
-                                            'placeholder': 'http://192.168.1.100:8096'
-                                        }
-                                    }
-                                ]
-                            },
-                            {
-                                'component': 'VCol',
-                                'props': {'cols': 12, 'md': 6},
-                                'content': [
-                                    {
-                                        'component': 'VTextField',
-                                        'props': {
-                                            'model': 'emby_apikey',
-                                            'label': 'Emby API Key',
-                                            'placeholder': 'Emby API密钥'
-                                        }
-                                    }
-                                ]
-                            }
-                        ]
-                    },
-                    {
-                        'component': 'VRow',
-                        'content': [
-                            {
-                                'component': 'VCol',
-                                'props': {'cols': 12},
-                                'content': [
-                                    {
-                                        'component': 'VAlert',
-                                        'props': {
-                                            'type': 'info',
-                                            'variant': 'tonal',
-                                            'text': '插件会扫描MP2入库后的STRM文件，通过转移记录查找对应的源STRM文件路径。'
-                                                    '如果源STRM文件在磁盘上已不存在，说明源文件已被删除，'
-                                                    '将通过Emby API删除该STRM文件对应的条目及附属文件。'
-                                                    '如果Emby地址和API Key留空，将使用系统配置的媒体服务器。'
-                                        }
-                                    }
-                                ]
-                            }
-                        ]
-                    },
-                    {
-                        'component': 'VRow',
-                        'content': [
-                            {
-                                'component': 'VCol',
-                                'props': {'cols': 12},
-                                'content': [
-                                    {
-                                        'component': 'VAlert',
-                                        'props': {
-                                            'type': 'warning',
-                                            'variant': 'tonal',
-                                            'text': '注意：删除Emby媒体库条目操作不可逆，请谨慎使用。'
-                                                    '建议先手动运行一次检查结果，确认无误后再开启定时任务。'
-                                        }
-                                    }
-                                ]
-                            }
-                        ]
-                    },
-                    # URL可用性检查（风险功能）
-                    {
-                        'component': 'VRow',
-                        'content': [
-                            {
-                                'component': 'VCol',
-                                'props': {'cols': 12},
-                                'content': [
-                                    {
-                                        'component': 'VAlert',
-                                        'props': {
-                                            'type': 'error',
-                                            'variant': 'tonal',
-                                            'text': '⚠️ 风险功能：URL可用性检查。启用后，对于没有转移记录的STRM文件，'
-                                                    '插件会通过HTTP请求模拟访问源链接来测试文件是否可用。'
-                                                    '此功能可能触发网盘或文件服务器的风控机制，请谨慎使用并严格控制频率。'
-                                        }
-                                    }
-                                ]
-                            }
-                        ]
-                    },
-                    {
-                        'component': 'VRow',
-                        'content': [
-                            {
-                                'component': 'VCol',
-                                'props': {'cols': 12, 'md': 3},
-                                'content': [
-                                    {
-                                        'component': 'VSwitch',
-                                        'props': {
-                                            'model': 'url_check_enabled',
-                                            'label': '启用URL可用性检查',
-                                            'color': 'error',
-                                        }
-                                    }
-                                ]
-                            },
-                            {
-                                'component': 'VCol',
-                                'props': {'cols': 12, 'md': 3},
-                                'content': [
-                                    {
-                                        'component': 'VTextField',
-                                        'props': {
-                                            'model': 'url_check_threads',
-                                            'label': '线程数',
-                                            'type': 'number',
-                                            'min': 1,
-                                            'max': 3,
-                                            'suffix': '个',
-                                            'placeholder': '1'
-                                        }
-                                    }
-                                ]
-                            },
-                            {
-                                'component': 'VCol',
-                                'props': {'cols': 12, 'md': 3},
-                                'content': [
-                                    {
-                                        'component': 'VTextField',
-                                        'props': {
-                                            'model': 'url_check_cooldown',
-                                            'label': '冷却时间',
-                                            'type': 'number',
-                                            'min': 3,
-                                            'max': 60,
-                                            'suffix': '秒',
-                                            'placeholder': '5'
-                                        }
-                                    }
-                                ]
-                            },
-                            {
-                                'component': 'VCol',
-                                'props': {'cols': 12, 'md': 3},
-                                'content': [
-                                    {
-                                        'component': 'VTextField',
-                                        'props': {
-                                            'model': 'url_check_daily_limit',
-                                            'label': '每日检查上限',
-                                            'type': 'number',
-                                            'min': 10,
-                                            'max': 500,
-                                            'suffix': '次',
-                                            'placeholder': '50'
-                                        }
-                                    }
-                                ]
-                            },
-                            {
-                                'component': 'VCol',
-                                'props': {'cols': 12, 'md': 3},
-                                'content': [
-                                    {
-                                        'component': 'VTextField',
-                                        'props': {
-                                            'model': 'url_check_cache_expiry',
-                                            'label': '缓存有效期',
-                                            'type': 'number',
-                                            'min': 0,
-                                            'suffix': '天',
-                                            'placeholder': '0'
-                                        }
-                                    }
-                                ]
-                            }
-                        ]
-                    },
+                    # ===== 清理操作 =====
                     {
                         'component': 'VRow',
                         'content': [
@@ -486,13 +309,313 @@ class StrmLinkChecker(_PluginBase):
                                 'props': {'cols': 12},
                                 'content': [
                                     {
-                                        'component': 'VAlert',
+                                        'component': 'VCard',
+                                        'props': {'variant': 'outlined'},
+                                        'content': [
+                                            {
+                                                'component': 'VCardTitle',
+                                                'props': {'class': 'pa-3 pb-0'},
+                                                'content': [
+                                                    {
+                                                        'component': 'VAlert',
+                                                        'props': {
+                                                            'type': 'warning',
+                                                            'variant': 'tonal',
+                                                            'density': 'compact',
+                                                            'class': 'mb-0',
+                                                            'text': '删除Emby媒体库条目操作不可逆，请谨慎使用。建议先手动运行一次确认无误后再开启定时任务。'
+                                                        }
+                                                    }
+                                                ]
+                                            },
+                                            {
+                                                'component': 'VCardText',
+                                                'props': {'class': 'pa-3'},
+                                                'content': [
+                                                    {
+                                                        'component': 'VRow',
+                                                        'props': {'dense': True},
+                                                        'content': [
+                                                            {
+                                                                'component': 'VCol',
+                                                                'props': {'cols': 12, 'md': 4, 'sm': 4},
+                                                                'content': [
+                                                                    {
+                                                                        'component': 'VSwitch',
+                                                                        'props': {
+                                                                            'model': 'delete_strm',
+                                                                            'label': '删除失效STRM',
+                                                                            'color': 'error',
+                                                                            'hideDetails': True,
+                                                                            'density': 'compact'
+                                                                        }
+                                                                    }
+                                                                ]
+                                                            },
+                                                            {
+                                                                'component': 'VCol',
+                                                                'props': {'cols': 12, 'md': 4, 'sm': 4},
+                                                                'content': [
+                                                                    {
+                                                                        'component': 'VSwitch',
+                                                                        'props': {
+                                                                            'model': 'delete_sidecar',
+                                                                            'label': '删除附属文件(jpg/nfo)',
+                                                                            'color': 'error',
+                                                                            'hideDetails': True,
+                                                                            'density': 'compact'
+                                                                        }
+                                                                    }
+                                                                ]
+                                                            },
+                                                            {
+                                                                'component': 'VCol',
+                                                                'props': {'cols': 12, 'md': 4, 'sm': 4},
+                                                                'content': [
+                                                                    {
+                                                                        'component': 'VSwitch',
+                                                                        'props': {
+                                                                            'model': 'delete_history',
+                                                                            'label': '删除整理记录',
+                                                                            'color': 'error',
+                                                                            'hideDetails': True,
+                                                                            'density': 'compact'
+                                                                        }
+                                                                    }
+                                                                ]
+                                                            }
+                                                        ]
+                                                    }
+                                                ]
+                                            }
+                                        ]
+                                    }
+                                ]
+                            }
+                        ]
+                    },
+                    # ===== Emby 连接 =====
+                    {
+                        'component': 'VRow',
+                        'content': [
+                            {
+                                'component': 'VCol',
+                                'props': {'cols': 12},
+                                'content': [
+                                    {
+                                        'component': 'VCard',
+                                        'props': {'variant': 'outlined'},
+                                        'content': [
+                                            {
+                                                'component': 'VCardTitle',
+                                                'props': {'class': 'pa-3 pb-0'},
+                                                'content': [
+                                                    {
+                                                        'component': 'VAlert',
+                                                        'props': {
+                                                            'type': 'info',
+                                                            'variant': 'tonal',
+                                                            'density': 'compact',
+                                                            'class': 'mb-0',
+                                                            'text': '插件通过转移记录查找源STRM文件，源文件缺失时通过Emby API删除对应条目。留空则使用系统配置的媒体服务器。'
+                                                        }
+                                                    }
+                                                ]
+                                            },
+                                            {
+                                                'component': 'VCardText',
+                                                'props': {'class': 'pa-3'},
+                                                'content': [
+                                                    {
+                                                        'component': 'VRow',
+                                                        'content': [
+                                                            {
+                                                                'component': 'VCol',
+                                                                'props': {'cols': 12, 'md': 6},
+                                                                'content': [
+                                                                    {
+                                                                        'component': 'VTextField',
+                                                                        'props': {
+                                                                            'model': 'emby_host',
+                                                                            'label': 'Emby地址',
+                                                                            'placeholder': 'http://192.168.1.100:8096',
+                                                                            'hideDetails': True,
+                                                                            'density': 'compact'
+                                                                        }
+                                                                    }
+                                                                ]
+                                                            },
+                                                            {
+                                                                'component': 'VCol',
+                                                                'props': {'cols': 12, 'md': 6},
+                                                                'content': [
+                                                                    {
+                                                                        'component': 'VTextField',
+                                                                        'props': {
+                                                                            'model': 'emby_apikey',
+                                                                            'label': 'Emby API Key',
+                                                                            'placeholder': 'Emby API密钥',
+                                                                            'hideDetails': True,
+                                                                            'density': 'compact'
+                                                                        }
+                                                                    }
+                                                                ]
+                                                            }
+                                                        ]
+                                                    }
+                                                ]
+                                            }
+                                        ]
+                                    }
+                                ]
+                            }
+                        ]
+                    },
+                    # ===== URL可用性检查（风险功能） =====
+                    {
+                        'component': 'VRow',
+                        'content': [
+                            {
+                                'component': 'VCol',
+                                'props': {'cols': 12},
+                                'content': [
+                                    {
+                                        'component': 'VCard',
                                         'props': {
-                                            'type': 'info',
-                                            'variant': 'tonal',
-                                            'text': '缓存有效期：URL检查结果缓存的天数。超过有效期后，下次检查会重新发起URL请求。'
-                                                    '设为0表示无限期（仅当STRM文件mtime变化时才重新检查）。'
-                                        }
+                                            'variant': 'outlined',
+                                            'class': 'border-error'
+                                        },
+                                        'content': [
+                                            {
+                                                'component': 'VCardTitle',
+                                                'props': {
+                                                    'class': 'pa-3 pb-0 d-flex align-center flex-wrap',
+                                                    'style': 'gap: 8px;'
+                                                },
+                                                'content': [
+                                                    {
+                                                        'component': 'VSwitch',
+                                                        'props': {
+                                                            'model': 'url_check_enabled',
+                                                            'label': '🔴 URL可用性检查',
+                                                            'color': 'error',
+                                                            'hideDetails': True,
+                                                            'density': 'compact'
+                                                        }
+                                                    },
+                                                    {
+                                                        'component': 'VChip',
+                                                        'props': {
+                                                            'color': 'error',
+                                                            'size': 'x-small',
+                                                            'variant': 'tonal',
+                                                            'label': True
+                                                        },
+                                                        'text': '风险功能'
+                                                    }
+                                                ]
+                                            },
+                                            {
+                                                'component': 'VCardText',
+                                                'props': {'class': 'pa-3 pt-0'},
+                                                'content': [
+                                                    {
+                                                        'component': 'VAlert',
+                                                        'props': {
+                                                            'type': 'error',
+                                                            'variant': 'tonal',
+                                                            'density': 'compact',
+                                                            'class': 'mb-3',
+                                                            'text': '启用后对无转移记录的STRM文件发起HTTP请求测试源链接可用性，可能触发网盘风控，请严格控制频率。缓存有效期设为0表示无限期（仅当STRM文件mtime变化时才重新检查）。'
+                                                        }
+                                                    },
+                                                    {
+                                                        'component': 'VRow',
+                                                        'content': [
+                                                            {
+                                                                'component': 'VCol',
+                                                                'props': {'cols': 12, 'md': 3, 'sm': 6},
+                                                                'content': [
+                                                                    {
+                                                                        'component': 'VTextField',
+                                                                        'props': {
+                                                                            'model': 'url_check_threads',
+                                                                            'label': '线程数',
+                                                                            'type': 'number',
+                                                                            'min': 1,
+                                                                            'max': 3,
+                                                                            'suffix': '个',
+                                                                            'hideDetails': True,
+                                                                            'density': 'compact',
+                                                                            'placeholder': '1'
+                                                                        }
+                                                                    }
+                                                                ]
+                                                            },
+                                                            {
+                                                                'component': 'VCol',
+                                                                'props': {'cols': 12, 'md': 3, 'sm': 6},
+                                                                'content': [
+                                                                    {
+                                                                        'component': 'VTextField',
+                                                                        'props': {
+                                                                            'model': 'url_check_cooldown',
+                                                                            'label': '请求间隔',
+                                                                            'type': 'number',
+                                                                            'min': 3,
+                                                                            'max': 60,
+                                                                            'suffix': '秒',
+                                                                            'hideDetails': True,
+                                                                            'density': 'compact',
+                                                                            'placeholder': '5'
+                                                                        }
+                                                                    }
+                                                                ]
+                                                            },
+                                                            {
+                                                                'component': 'VCol',
+                                                                'props': {'cols': 12, 'md': 3, 'sm': 6},
+                                                                'content': [
+                                                                    {
+                                                                        'component': 'VTextField',
+                                                                        'props': {
+                                                                            'model': 'url_check_daily_limit',
+                                                                            'label': '每日上限',
+                                                                            'type': 'number',
+                                                                            'min': 10,
+                                                                            'max': 500,
+                                                                            'suffix': '次',
+                                                                            'hideDetails': True,
+                                                                            'density': 'compact',
+                                                                            'placeholder': '50'
+                                                                        }
+                                                                    }
+                                                                ]
+                                                            },
+                                                            {
+                                                                'component': 'VCol',
+                                                                'props': {'cols': 12, 'md': 3, 'sm': 6},
+                                                                'content': [
+                                                                    {
+                                                                        'component': 'VTextField',
+                                                                        'props': {
+                                                                            'model': 'url_check_cache_expiry',
+                                                                            'label': '缓存有效期',
+                                                                            'type': 'number',
+                                                                            'min': 0,
+                                                                            'suffix': '天',
+                                                                            'hideDetails': True,
+                                                                            'density': 'compact',
+                                                                            'placeholder': '0'
+                                                                        }
+                                                                    }
+                                                                ]
+                                                            }
+                                                        ]
+                                                    }
+                                                ]
+                                            }
+                                        ]
                                     }
                                 ]
                             }
