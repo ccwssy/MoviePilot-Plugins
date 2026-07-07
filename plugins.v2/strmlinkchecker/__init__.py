@@ -313,7 +313,7 @@ class StrmLinkChecker(_PluginBase):
                                         'props': {'variant': 'outlined'},
                                         'content': [
                                             {
-                                                'component': 'VCardTitle',
+                                                'component': 'VCardText',
                                                 'props': {'class': 'pa-3 pb-0'},
                                                 'content': [
                                                     {
@@ -322,9 +322,14 @@ class StrmLinkChecker(_PluginBase):
                                                             'type': 'warning',
                                                             'variant': 'tonal',
                                                             'density': 'compact',
-                                                            'class': 'mb-0',
-                                                            'text': '删除Emby媒体库条目操作不可逆，请谨慎使用。建议先手动运行一次确认无误后再开启定时任务。'
-                                                        }
+                                                            'class': 'mb-0'
+                                                        },
+                                                        'content': [
+                                                            {
+                                                                'component': 'span',
+                                                                'text': '删除Emby媒体库条目操作不可逆，请谨慎使用。建议先手动运行一次确认无误后再开启定时任务。'
+                                                            }
+                                                        ]
                                                     }
                                                 ]
                                             },
@@ -407,7 +412,7 @@ class StrmLinkChecker(_PluginBase):
                                         'props': {'variant': 'outlined'},
                                         'content': [
                                             {
-                                                'component': 'VCardTitle',
+                                                'component': 'VCardText',
                                                 'props': {'class': 'pa-3 pb-0'},
                                                 'content': [
                                                     {
@@ -416,9 +421,14 @@ class StrmLinkChecker(_PluginBase):
                                                             'type': 'info',
                                                             'variant': 'tonal',
                                                             'density': 'compact',
-                                                            'class': 'mb-0',
-                                                            'text': '插件通过转移记录查找源STRM文件，源文件缺失时通过Emby API删除对应条目。留空则使用系统配置的媒体服务器。'
-                                                        }
+                                                            'class': 'mb-0'
+                                                        },
+                                                        'content': [
+                                                            {
+                                                                'component': 'span',
+                                                                'text': '插件通过转移记录查找源STRM文件，源文件缺失时通过Emby API删除对应条目。留空则使用系统配置的媒体服务器。'
+                                                            }
+                                                        ]
                                                     }
                                                 ]
                                             },
@@ -525,9 +535,14 @@ class StrmLinkChecker(_PluginBase):
                                                             'type': 'error',
                                                             'variant': 'tonal',
                                                             'density': 'compact',
-                                                            'class': 'mb-3',
-                                                            'text': '启用后对无转移记录的STRM文件发起HTTP请求测试源链接可用性，可能触发网盘风控，请严格控制频率。缓存有效期设为0表示无限期（仅当STRM文件mtime变化时才重新检查）。'
-                                                        }
+                                                            'class': 'mb-3'
+                                                        },
+                                                        'content': [
+                                                            {
+                                                                'component': 'span',
+                                                                'text': '启用后对无转移记录的STRM文件发起HTTP请求测试源链接可用性，可能触发网盘风控，请严格控制频率。缓存有效期设为0表示无限期（仅当STRM文件mtime变化时才重新检查）。'
+                                                            }
+                                                        ]
                                                     },
                                                     {
                                                         'component': 'VRow',
