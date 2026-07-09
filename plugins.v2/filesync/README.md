@@ -41,14 +41,14 @@
 
 ```
 目录映射：
-/clouddata/dl/strm/115/P18:/clouddata/movies/纯云盘/P18
-/clouddata/dl/video:/clouddata/movies/视频
+/media/source/movies:/media/target/movies
+/media/source/tvshows:/media/target/tvshows
 
 同步文件后缀：
 .strm, .mkv, .mp4, .avi, .ts, .iso
 ```
 
-源目录 `/clouddata/dl/strm/115/P18` 下有 `/电影/日韩电影/xx.strm`，目的目录 `/clouddata/movies/纯云盘/P18` 下自动同步为 `/电影/日韩电影/xx.strm`。
+源目录 `/media/source/movies` 下有 `/电影/国产电影/xx.mp4`，目的目录 `/media/target/movies` 下自动同步为 `/电影/国产电影/xx.mp4`。
 
 ## 触发方式
 
