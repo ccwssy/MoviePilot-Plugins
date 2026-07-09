@@ -28,7 +28,7 @@ class StrmLinkChecker(_PluginBase):
     plugin_name = "Strm失效清理"
     plugin_desc = "通过转移记录对比Emby媒体库STRM文件与源STRM文件，如果源文件已删除，同步清理Emby条目及附属文件。"
     plugin_icon = "strmcheck.png"
-    plugin_version = "1.1.7"
+    plugin_version = "1.1.8"
     plugin_author = "ccwssy"
     author_url = "https://github.com/ccwssy/MoviePilot-Plugins"
     plugin_config_prefix = "strmlinkchecker_"
@@ -952,8 +952,15 @@ class StrmLinkChecker(_PluginBase):
                     logger.info(f"URL检查本轮未完成（已检查{url_checked_count}/{url_need_check_count}个），"
                                 f"跳过{total_url_skipped}个，下次继续")
             elif self._url_check_enabled and url_need_check_count == 0:
-                # 没有需要URL检查的文件（全部缓存命中），轮次完成时间不变
-                logger.info("URL检查全部命中缓存，无需实际检查")
+                # 没有需要URL检查的文件（全部缓存命中）
+                # 如果还没有轮次完成时间，说明是首次运行且全部命中缓存，记录当前时间作为轮次完成时间
+                existing_round = self.get_data('url_check_round_completed_at')
+                if not existing_round:
+                    now_str = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
+                    self.save_data('url_check_round_completed_at', now_str)
+                    logger.info(f"URL检查全部命中缓存，初始化轮次完成时间: {now_str}")
+                else:
+                    logger.info("URL检查全部命中缓存，轮次完成时间不变")
 
             # 发送通知
             if self._notify:
