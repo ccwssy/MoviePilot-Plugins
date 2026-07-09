@@ -28,7 +28,7 @@ class StrmLinkChecker(_PluginBase):
     plugin_name = "Strm失效清理"
     plugin_desc = "通过转移记录对比Emby媒体库STRM文件与源STRM文件，如果源文件已删除，同步清理Emby条目及附属文件。"
     plugin_icon = "strmcheck.png"
-    plugin_version = "1.1.4"
+    plugin_version = "1.1.6"
     plugin_author = "ccwssy"
     author_url = "https://github.com/ccwssy/MoviePilot-Plugins"
     plugin_config_prefix = "strmlinkchecker_"
@@ -313,7 +313,7 @@ class StrmLinkChecker(_PluginBase):
                                         'props': {'variant': 'outlined'},
                                         'content': [
                                             {
-                                                'component': 'VCardText',
+                                                'component': 'VCardTitle',
                                                 'props': {'class': 'pa-3 pb-0'},
                                                 'content': [
                                                     {
@@ -322,14 +322,9 @@ class StrmLinkChecker(_PluginBase):
                                                             'type': 'warning',
                                                             'variant': 'tonal',
                                                             'density': 'compact',
-                                                            'class': 'mb-0'
-                                                        },
-                                                        'content': [
-                                                            {
-                                                                'component': 'span',
-                                                                'text': '删除Emby媒体库条目操作不可逆，请谨慎使用。建议先手动运行一次确认无误后再开启定时任务。'
-                                                            }
-                                                        ]
+                                                            'class': 'mb-0',
+                                                            'text': '删除Emby媒体库条目操作不可逆，请谨慎使用。建议先手动运行一次确认无误后再开启定时任务。'
+                                                        }
                                                     }
                                                 ]
                                             },
@@ -412,7 +407,7 @@ class StrmLinkChecker(_PluginBase):
                                         'props': {'variant': 'outlined'},
                                         'content': [
                                             {
-                                                'component': 'VCardText',
+                                                'component': 'VCardTitle',
                                                 'props': {'class': 'pa-3 pb-0'},
                                                 'content': [
                                                     {
@@ -421,14 +416,9 @@ class StrmLinkChecker(_PluginBase):
                                                             'type': 'info',
                                                             'variant': 'tonal',
                                                             'density': 'compact',
-                                                            'class': 'mb-0'
-                                                        },
-                                                        'content': [
-                                                            {
-                                                                'component': 'span',
-                                                                'text': '插件通过转移记录查找源STRM文件，源文件缺失时通过Emby API删除对应条目。留空则使用系统配置的媒体服务器。'
-                                                            }
-                                                        ]
+                                                            'class': 'mb-0',
+                                                            'text': '插件通过转移记录查找源STRM文件，源文件缺失时通过Emby API删除对应条目。留空则使用系统配置的媒体服务器。'
+                                                        }
                                                     }
                                                 ]
                                             },
@@ -535,14 +525,9 @@ class StrmLinkChecker(_PluginBase):
                                                             'type': 'error',
                                                             'variant': 'tonal',
                                                             'density': 'compact',
-                                                            'class': 'mb-3'
-                                                        },
-                                                        'content': [
-                                                            {
-                                                                'component': 'span',
-                                                                'text': '启用后对无转移记录的STRM文件发起HTTP请求测试源链接可用性，可能触发网盘风控，请严格控制频率。缓存有效期设为0表示无限期（仅当STRM文件mtime变化时才重新检查）。'
-                                                            }
-                                                        ]
+                                                            'class': 'mb-3',
+                                                            'text': '启用后对无转移记录的STRM文件发起HTTP请求测试源链接可用性，可能触发网盘风控，请严格控制频率。缓存有效期设为0表示无限期（仅当STRM文件mtime变化时才重新检查）。'
+                                                        }
                                                     },
                                                     {
                                                         'component': 'VRow',
@@ -900,8 +885,15 @@ class StrmLinkChecker(_PluginBase):
                                             cache_expired = True
                                     except ValueError:
                                         pass
-                            if not cache_expired and abs(cached_mtime - current_mtime) < 0.001:
+                            if abs(cached_mtime - current_mtime) < 0.001:
                                 cached_status = cached_entry.get("status", "未知")
+                                # 区分：缓存已过期（自然减到0）vs 无限期/未过期
+                                if cache_expired:
+                                    action_text = f"跳过(缓存已过期,上次状态:{cached_status})"
+                                elif self._url_check_cache_expiry == 0:
+                                    action_text = f"跳过(缓存命中·无限期,上次状态:{cached_status})"
+                                else:
+                                    action_text = f"跳过(缓存命中,上次状态:{cached_status})"
                                 total_url_cached += 1
                                 # 覆盖之前保存的"待URL检查"记录
                                 history = self.get_data('history') or []
@@ -912,7 +904,7 @@ class StrmLinkChecker(_PluginBase):
                                     "strm_path": strm_path,
                                     "source_url": "",
                                     "status": "无转移记录",
-                                    "action": f"跳过(缓存命中,上次状态:{cached_status})",
+                                    "action": action_text,
                                     "title": "",
                                     "check_time": time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
                                 })
@@ -952,12 +944,18 @@ class StrmLinkChecker(_PluginBase):
                     msg_lines.append(f"  ├ 删除 Emby 条目: {total_duplicate_emby} 个")
                     msg_lines.append(f"  └ 删除 STRM 文件: {total_duplicate_strm} 个")
                 if self._url_check_enabled:
+                    # 缓存有效期显示：0=无限期，>0=具体天数
+                    if self._url_check_cache_expiry == 0:
+                        cache_expiry_text = "无限期"
+                    else:
+                        cache_expiry_text = f"{self._url_check_cache_expiry}天"
                     msg_lines.append("")
                     msg_lines.append(f"🌐 URL可用性检查")
                     msg_lines.append(f"  ├ 链接有效: {total_url_alive} 个")
                     msg_lines.append(f"  ├ 链接失效: {total_url_dead} 个")
                     msg_lines.append(f"  ├ 缓存跳过: {total_url_cached} 个")
-                    msg_lines.append(f"  └ 跳过(已达上限): {total_url_skipped} 个")
+                    msg_lines.append(f"  ├ 跳过(已达上限): {total_url_skipped} 个")
+                    msg_lines.append(f"  └ 缓存有效期: {cache_expiry_text}")
                 if failed_items:
                     msg_lines.append("")
                     msg_lines.append(f"⚠️ 检查失败: {len(failed_items)} 个")
