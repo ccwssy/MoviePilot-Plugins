@@ -28,7 +28,7 @@ class StrmLinkChecker(_PluginBase):
     plugin_name = "Strm失效清理"
     plugin_desc = "通过转移记录对比Emby媒体库STRM文件与源STRM文件，如果源文件已删除，同步清理Emby条目及附属文件。"
     plugin_icon = "strmcheck.png"
-    plugin_version = "1.1.6"
+    plugin_version = "1.1.7"
     plugin_author = "ccwssy"
     author_url = "https://github.com/ccwssy/MoviePilot-Plugins"
     plugin_config_prefix = "strmlinkchecker_"
@@ -59,6 +59,9 @@ class StrmLinkChecker(_PluginBase):
     _url_check_count_lock = threading.Lock()
     # URL缓存有效期（天），0表示无限期
     _url_check_cache_expiry = 0
+    # 本轮检查中实际发起HTTP请求的URL数量（用于判断轮次是否完成）
+    _url_check_round_checked_count = 0
+    _url_check_round_total_count = 0
 
     def init_plugin(self, config: dict = None):
         self._transferhis = TransferHistoryOper()
@@ -808,6 +811,8 @@ class StrmLinkChecker(_PluginBase):
             # 用于URL检查的线程控制
             url_check_lock = threading.Lock()
             url_check_sem = threading.Semaphore(self._url_check_threads if self._url_check_enabled else 1)
+            # 本轮需要URL检查的文件总数（不含缓存命中）
+            url_need_check_count = 0
 
             def url_check_worker(strm_path: str):
                 """URL检查工作线程"""
@@ -874,24 +879,32 @@ class StrmLinkChecker(_PluginBase):
                             except OSError:
                                 current_mtime = 0
                             cached_mtime = cached_entry.get("mtime", 0)
-                            # 检查缓存是否在有效期内
+                            # 检查缓存是否在有效期内（基于轮次完成时间）
                             cache_expired = False
-                            if self._url_check_cache_expiry > 0:
-                                checked_at_str = cached_entry.get("checked_at", "")
-                                if checked_at_str:
-                                    try:
-                                        checked_at = datetime.strptime(checked_at_str, "%Y-%m-%d %H:%M:%S")
-                                        if (datetime.now() - checked_at).days >= self._url_check_cache_expiry:
-                                            cache_expired = True
-                                    except ValueError:
-                                        pass
+                            round_completed_at = self.get_data('url_check_round_completed_at')
+                            if self._url_check_cache_expiry > 0 and round_completed_at:
+                                try:
+                                    round_time = datetime.strptime(round_completed_at, "%Y-%m-%d %H:%M:%S")
+                                    days_since_round = (datetime.now() - round_time).days
+                                    if days_since_round >= self._url_check_cache_expiry:
+                                        cache_expired = True
+                                except ValueError:
+                                    pass
                             if abs(cached_mtime - current_mtime) < 0.001:
                                 cached_status = cached_entry.get("status", "未知")
-                                # 区分：缓存已过期（自然减到0）vs 无限期/未过期
-                                if cache_expired:
-                                    action_text = f"跳过(缓存已过期,上次状态:{cached_status})"
-                                elif self._url_check_cache_expiry == 0:
+                                # 计算剩余天数
+                                if self._url_check_cache_expiry == 0:
                                     action_text = f"跳过(缓存命中·无限期,上次状态:{cached_status})"
+                                elif cache_expired:
+                                    action_text = f"跳过(缓存已过期,上次状态:{cached_status})"
+                                elif round_completed_at:
+                                    try:
+                                        round_time = datetime.strptime(round_completed_at, "%Y-%m-%d %H:%M:%S")
+                                        days_since = (datetime.now() - round_time).days
+                                        remain = self._url_check_cache_expiry - days_since
+                                        action_text = f"跳过(缓存命中·剩余{remain}天,上次状态:{cached_status})"
+                                    except ValueError:
+                                        action_text = f"跳过(缓存命中,上次状态:{cached_status})"
                                 else:
                                     action_text = f"跳过(缓存命中,上次状态:{cached_status})"
                                 total_url_cached += 1
@@ -911,6 +924,7 @@ class StrmLinkChecker(_PluginBase):
                                 self.save_data('history', history)
                                 continue
                         # 缓存未命中，启动URL检查线程
+                        url_need_check_count += 1
                         t = threading.Thread(target=url_check_worker, args=(strm_path,))
                         t.start()
                         url_threads.append(t)
@@ -921,6 +935,25 @@ class StrmLinkChecker(_PluginBase):
             # 等待所有URL检查线程完成
             for t in url_threads:
                 t.join(timeout=300)
+
+            # 判断本轮URL检查是否全部完成（所有需要检查的文件都已处理）
+            # 条件：没有因每日上限跳过的文件，且所有需要检查的文件都已检查
+            if self._url_check_enabled and url_need_check_count > 0:
+                # 检查是否还有文件因每日上限被跳过
+                # 如果 total_url_skipped > 0 且 url_need_check_count > total_url_alive + total_url_dead，
+                # 说明有文件因上限被跳过，本轮未完成
+                url_checked_count = total_url_alive + total_url_dead
+                if url_checked_count >= url_need_check_count:
+                    # 本轮所有URL检查完成，记录轮次完成时间
+                    now_str = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
+                    self.save_data('url_check_round_completed_at', now_str)
+                    logger.info(f"URL检查本轮全部完成，记录轮次完成时间: {now_str}")
+                else:
+                    logger.info(f"URL检查本轮未完成（已检查{url_checked_count}/{url_need_check_count}个），"
+                                f"跳过{total_url_skipped}个，下次继续")
+            elif self._url_check_enabled and url_need_check_count == 0:
+                # 没有需要URL检查的文件（全部缓存命中），轮次完成时间不变
+                logger.info("URL检查全部命中缓存，无需实际检查")
 
             # 发送通知
             if self._notify:
@@ -944,11 +977,23 @@ class StrmLinkChecker(_PluginBase):
                     msg_lines.append(f"  ├ 删除 Emby 条目: {total_duplicate_emby} 个")
                     msg_lines.append(f"  └ 删除 STRM 文件: {total_duplicate_strm} 个")
                 if self._url_check_enabled:
-                    # 缓存有效期显示：0=无限期，>0=具体天数
+                    # 缓存有效期显示：基于轮次完成时间计算剩余天数
+                    round_completed_at = self.get_data('url_check_round_completed_at')
                     if self._url_check_cache_expiry == 0:
                         cache_expiry_text = "无限期"
+                    elif round_completed_at:
+                        try:
+                            round_time = datetime.strptime(round_completed_at, "%Y-%m-%d %H:%M:%S")
+                            days_since = (datetime.now() - round_time).days
+                            remain = max(0, self._url_check_cache_expiry - days_since)
+                            if remain == 0:
+                                cache_expiry_text = "已过期（下一轮将重新检查）"
+                            else:
+                                cache_expiry_text = f"剩余 {remain} 天（共 {self._url_check_cache_expiry} 天）"
+                        except ValueError:
+                            cache_expiry_text = f"{self._url_check_cache_expiry}天"
                     else:
-                        cache_expiry_text = f"{self._url_check_cache_expiry}天"
+                        cache_expiry_text = f"首轮检查中（共 {self._url_check_cache_expiry} 天）"
                     msg_lines.append("")
                     msg_lines.append(f"🌐 URL可用性检查")
                     msg_lines.append(f"  ├ 链接有效: {total_url_alive} 个")
