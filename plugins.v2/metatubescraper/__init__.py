@@ -29,7 +29,7 @@ class MetaTubeScraper(_PluginBase):
     plugin_name = "MetaTube 刮削器"
     plugin_desc = "文件同步 + 番号刮削：监控源目录同步文件，或识别番号视频自动整理入库并写入 NFO 文件及海报。"
     plugin_icon = "metatube.png"
-    plugin_version = "1.5.1"
+    plugin_version = "1.6.0"
     plugin_author = "ccwssy"
     author_url = "https://github.com/ccwssy"
     plugin_config_prefix = "metatubescraper_"
@@ -318,6 +318,23 @@ class MetaTubeScraper(_PluginBase):
                 title = translated
         number = full.get("number", stem)
         num_clean = re.sub(r'[\\\\/:*?\"<>|]', "_", number)
+        # 检测文件名中的标签：-C（中文字幕）、-UC/-uncensored（破解版）
+        suffix_tag = ""
+        stem_lower = stem.lower()
+        if stem_lower.endswith("-c"):
+            suffix_tag = "-C"
+        elif stem_lower.endswith("-uc"):
+            suffix_tag = "-UC"
+        elif stem_lower.endswith("-uncensored"):
+            suffix_tag = "-uncensored"
+        # 翻译后的标题格式：{番号} {标题}
+        if title and title != num_clean:
+            display_title = f"{num_clean} {title}"
+        else:
+            display_title = num_clean
+        full["title"] = display_title
+        # 带标签的番号文件名
+        tagged_number = f"{num_clean}{suffix_tag}"
         # 保持源目录结构，只把文件名改为番号
         if source_base:
             rel_dir = video_path.parent.relative_to(source_base)
@@ -325,10 +342,10 @@ class MetaTubeScraper(_PluginBase):
             if num_clean.lower() in video_path.parent.name.lower():
                 dest_dir = target_base / rel_dir
             else:
-                dest_dir = target_base / rel_dir / num_clean
+                dest_dir = target_base / rel_dir / tagged_number
         else:
-            dest_dir = target_base / num_clean
-        new_name = f"{num_clean}{video_path.suffix}"
+            dest_dir = target_base / tagged_number
+        new_name = f"{tagged_number}{video_path.suffix}"
         dest_path = dest_dir / new_name
         if dest_path.exists():
             return
@@ -444,8 +461,13 @@ class MetaTubeScraper(_PluginBase):
             translated = self._translate_text(title)
             if translated:
                 title = translated
-        # 用翻译后的标题构建 NFO
-        full["title"] = title
+        # 翻译后的标题格式：{番号} {标题}
+        num_clean = re.sub(r'[\\\\/:*?\"<>|]', "_", (full.get("number") or stem))
+        if title and title != num_clean:
+            display_title = f"{num_clean} {title}"
+        else:
+            display_title = num_clean
+        full["title"] = display_title
         nfo_path.write_text(self._build_nfo(full, stem), encoding="utf-8")
         if self._download_images:
             self._download_cover(provider, movie_id, parent, stem)
