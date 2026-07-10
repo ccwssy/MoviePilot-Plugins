@@ -29,7 +29,7 @@ class MetaTubeScraper(_PluginBase):
     plugin_name = "MetaTube 刮削器"
     plugin_desc = "文件同步 + 番号刮削：监控源目录同步文件，或识别番号视频自动整理入库并写入 NFO 文件及海报。"
     plugin_icon = "metatube.png"
-    plugin_version = "1.4.0"
+    plugin_version = "1.5.0"
     plugin_author = "ccwssy"
     author_url = "https://github.com/ccwssy"
     plugin_config_prefix = "metatubescraper_"
@@ -56,6 +56,7 @@ class MetaTubeScraper(_PluginBase):
     _metatube_token = ""
     _translate_enabled = False
     _translate_engine = "GoogleFree"
+    _translate_params = ""
     _keyword_pattern = r"^[A-Za-z]{1,6}-\d{2,}(?:-[A-Z0-9]+)?$"
     _sync_extensions = ".strm, .mkv, .mp4, .avi, .ts, .iso, .nfo, .jpg, .png"
     _organize_mode = "copy"
@@ -93,6 +94,7 @@ class MetaTubeScraper(_PluginBase):
         self._metatube_token = config.get("metatube_token", "")
         self._translate_enabled = config.get("translate_enabled", False)
         self._translate_engine = config.get("translate_engine", "GoogleFree")
+        self._translate_params = config.get("translate_params", "")
         self._keyword_pattern = config.get("keyword_pattern", r"^[A-Za-z]{1,6}-\d{2,}(?:-[A-Z0-9]+)?$")
         self._sync_extensions = config.get("sync_extensions", ".strm, .mkv, .mp4, .avi, .ts, .iso, .nfo, .jpg, .png")
         self._organize_mode = config.get("organize_mode", "copy")
@@ -123,6 +125,7 @@ class MetaTubeScraper(_PluginBase):
             "scrape_enabled": self._scrape_enabled,
             "metatube_url": self._metatube_url, "metatube_token": self._metatube_token,
             "translate_enabled": self._translate_enabled, "translate_engine": self._translate_engine,
+            "translate_params": self._translate_params,
             "keyword_pattern": self._keyword_pattern,
             "organize_mode": self._organize_mode,
             "download_images": self._download_images, "cover_type": self._cover_type,
@@ -494,9 +497,17 @@ class MetaTubeScraper(_PluginBase):
         if not text:
             return None
         try:
+            params = {"q": text, "from": "auto", "to": "zh", "engine": self._translate_engine}
+            # 解析额外的翻译参数（如 baidu-app-id=xxx,baidu-app-key=xxx）
+            if self._translate_params:
+                for pair in self._translate_params.split(","):
+                    pair = pair.strip()
+                    if "=" in pair:
+                        k, v = pair.split("=", 1)
+                        params[k.strip()] = v.strip()
             resp = httpx.get(
                 f"{self._metatube_url}/v1/translate",
-                params={"q": text, "from": "auto", "to": "zh", "engine": self._translate_engine},
+                params=params,
                 headers=self._mt_headers(),
                 timeout=30.0,
             )
@@ -705,7 +716,7 @@ class MetaTubeScraper(_PluginBase):
                                             {'component': 'VRow', 'content': [{'component': 'VCol', 'props': {'cols': 12, 'md': 6}, 'content': [{'component': 'VTextField', 'props': {'model': 'metatube_url', 'label': 'MetaTube 地址', 'placeholder': 'http://192.168.2.4:8900', 'hideDetails': True, 'density': 'compact'}}]}, {'component': 'VCol', 'props': {'cols': 12, 'md': 6}, 'content': [{'component': 'VTextField', 'props': {'model': 'metatube_token', 'label': 'Token（可选）', 'placeholder': '未设置则留空', 'hideDetails': True, 'density': 'compact'}}]}]},
                                             {'component': 'VRow', 'content': [{'component': 'VCol', 'props': {'cols': 12, 'md': 6}, 'content': [{'component': 'VTextField', 'props': {'model': 'keyword_pattern', 'label': '番号正则', 'placeholder': r"^[A-Za-z]{1,6}-\d{2,}", 'hideDetails': True, 'density': 'compact', 'persistentHint': True, 'hint': '文件名匹配番号正则的视频走刮削，其他走同步'}}]}]},
                                             {'component': 'VRow', 'content': [{'component': 'VCol', 'props': {'cols': 12, 'md': 4}, 'content': [{'component': 'VSwitch', 'props': {'model': 'download_images', 'label': '下载海报', 'color': 'primary', 'hideDetails': True, 'density': 'compact'}}]}, {'component': 'VCol', 'props': {'cols': 12, 'md': 4}, 'content': [{'component': 'VSwitch', 'props': {'model': 'skip_existing', 'label': '跳过已有', 'color': 'primary', 'hideDetails': True, 'density': 'compact'}}]}, {'component': 'VCol', 'props': {'cols': 12, 'md': 4}, 'content': [{'component': 'VSwitch', 'props': {'model': 'translate_enabled', 'label': '标题翻译', 'color': 'primary', 'hideDetails': True, 'density': 'compact'}}]}]},
-                                            {'component': 'VRow', 'content': [{'component': 'VCol', 'props': {'cols': 12, 'md': 8, 'offset-md': 2}, 'content': [{'component': 'VSelect', 'props': {'model': 'translate_engine', 'label': '翻译引擎', 'items': [{'title': 'Google 免费', 'value': 'GoogleFree'}, {'title': 'Google 付费', 'value': 'Google'}, {'title': '百度', 'value': 'Baidu'}, {'title': 'DeepL', 'value': 'DeepL'}, {'title': 'OpenAI', 'value': 'OpenAi'}], 'hideDetails': True, 'density': 'compact'}}]}]},
+                                            {'component': 'VRow', 'content': [{'component': 'VCol', 'props': {'cols': 12, 'md': 6}, 'content': [{'component': 'VSelect', 'props': {'model': 'translate_engine', 'label': '翻译引擎', 'items': [{'title': 'Google 免费', 'value': 'GoogleFree'}, {'title': 'Google 付费', 'value': 'Google'}, {'title': '百度', 'value': 'Baidu'}, {'title': 'DeepL', 'value': 'DeepL'}, {'title': 'OpenAI', 'value': 'OpenAi'}], 'hideDetails': True, 'density': 'compact'}}]}, {'component': 'VCol', 'props': {'cols': 12, 'md': 6}, 'content': [{'component': 'VTextField', 'props': {'model': 'translate_params', 'label': '翻译参数', 'placeholder': 'baidu-app-id=xxx,baidu-app-key=xxx', 'hideDetails': True, 'density': 'compact', 'persistentHint': True, 'hint': 'API Key 等参数，逗号分隔'}}]}]},
                                         ]
                                     }
                                 ]
@@ -723,7 +734,7 @@ class MetaTubeScraper(_PluginBase):
             "sidecar_extensions": ".jpg, .nfo, .png, .srt, .ass, .sub",
             "scrape_enabled": False,
             "metatube_url": "http://192.168.2.4:8897", "metatube_token": "",
-            "translate_enabled": False, "translate_engine": "GoogleFree",
+            "translate_enabled": False, "translate_engine": "GoogleFree", "translate_params": "",
             "keyword_pattern": r"^[A-Za-z]{1,6}-\d{2,}(?:-[A-Z0-9]+)?$",
             "sync_extensions": ".strm, .mkv, .mp4, .avi, .ts, .iso, .nfo, .jpg, .png",
             "organize_mode": "copy",
