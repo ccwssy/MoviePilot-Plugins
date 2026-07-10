@@ -33,16 +33,19 @@
   },
   "MetaTubeScraper": {
     "name": "MetaTube 刮削器",
-    "description": "辅助识别番号视频，让 MP 能自动整理入库，完成后写入 NFO 文件及海报。",
-    "labels": "MetaTube,刮削,JAV,辅助识别,NFO,海报",
-    "version": "1.2.0",
+    "description": "文件同步 + 番号刮削：监控源目录同步文件，或识别番号视频自动整理入库并写入 NFO 文件及海报。",
+    "labels": "文件同步,番号刮削,MetaTube,JAV,NFO,海报",
+    "version": "1.5.1",
     "icon": "metatube.png",
     "author": "ccwssy",
     "level": 1,
     "history": {
-      "v1.0.0": "初始版本：自动整理完成后调用 MetaTube API 刮削 JAV 元数据，写入 NFO 文件及海报。",
-      "v1.1.0": "新增 NameRecognize 辅助识别：整理阶段无法识别番号文件时调用 MetaTube API 识别，匹配后 MP 可按电影正常整理。",
-      "v1.2.0": "重构：使用 ChainEventType.NameRecognize 链式事件，在 MP 识别阶段提供番号标题和年份，使 TMDB 能正确识别并自动整理。"
+      "v1.5.1": "API Key 配置项改名并补充说明",
+      "v1.5.0": "新增标题翻译功能，支持多引擎和 API Key 参数传递",
+      "v1.4.0": "整合文件同步与番号刮削，保持源目录结构，修复 MetaTube API 地址",
+      "v1.2.0": "重构：使用 ChainEventType.NameRecognize 链式事件",
+      "v1.1.0": "新增 NameRecognize 辅助识别",
+      "v1.0.0": "初始版本"
     }
   }
 }
