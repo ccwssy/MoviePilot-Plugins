@@ -52,8 +52,7 @@ class MetaTubeScraper(_PluginBase):
     _sync_running = False
 
     _scrape_enabled = False
-    _scrape_category = "actor"
-    _metatube_url = "http://192.168.2.4:8900"
+    _metatube_url = "http://192.168.2.4:8897"
     _metatube_token = ""
     _keyword_pattern = r"^[A-Za-z]{1,6}-\d{2,}(?:-[A-Z0-9]+)?$"
     _sync_extensions = ".strm, .mkv, .mp4, .avi, .ts, .iso, .nfo, .jpg, .png"
@@ -88,8 +87,7 @@ class MetaTubeScraper(_PluginBase):
                     self._dir_pairs[src] = dst
 
         self._scrape_enabled = config.get("scrape_enabled", False)
-        self._scrape_category = config.get("scrape_category", "actor")
-        self._metatube_url = config.get("metatube_url", "http://192.168.2.4:8900").rstrip("/")
+        self._metatube_url = config.get("metatube_url", "http://192.168.2.4:8897").rstrip("/")
         self._metatube_token = config.get("metatube_token", "")
         self._keyword_pattern = config.get("keyword_pattern", r"^[A-Za-z]{1,6}-\d{2,}(?:-[A-Z0-9]+)?$")
         self._sync_extensions = config.get("sync_extensions", ".strm, .mkv, .mp4, .avi, .ts, .iso, .nfo, .jpg, .png")
@@ -118,7 +116,7 @@ class MetaTubeScraper(_PluginBase):
             "dir_config": "\n".join(f"{k}:{v}" for k, v in self._dir_pairs.items()),
             "sync_extensions": self._sync_extensions,
             "delete_sidecar": self._delete_sidecar, "sidecar_extensions": self._sidecar_extensions,
-            "scrape_enabled": self._scrape_enabled, "scrape_category": self._scrape_category,
+            "scrape_enabled": self._scrape_enabled,
             "metatube_url": self._metatube_url, "metatube_token": self._metatube_token,
             "keyword_pattern": self._keyword_pattern,
             "organize_mode": self._organize_mode,
@@ -269,23 +267,6 @@ class MetaTubeScraper(_PluginBase):
                     if fp.suffix.lower() in video_exts:
                         self._process_video(fp, Path(dst_dir))
 
-    def _get_category_path(self, movie: dict, number: str) -> str:
-        cat = self._scrape_category
-        if cat == "none":
-            return number
-        if cat == "actor":
-            actors = movie.get("actors", [])
-            name = actors[0] if actors else "Unknown"
-            return f"{re.sub(r'[\\\\/:*?\"<>|]', '_', name)}/{number}"
-        if cat == "maker":
-            maker = movie.get("maker", "") or movie.get("label", "") or "Unknown"
-            return f"{re.sub(r'[\\\\/:*?\"<>|]', '_', maker)}/{number}"
-        if cat == "genre":
-            genres = movie.get("genres", [])
-            g = genres[0] if genres else "Other"
-            return f"{re.sub(r'[\\\\/:*?\"<>|]', '_', g)}/{number}"
-        return number
-
     def _process_video(self, video_path: Path, target_base: Path = None):
         name, stem = video_path.name, video_path.stem
         try:
@@ -294,13 +275,20 @@ class MetaTubeScraper(_PluginBase):
         except re.error:
             return
         if target_base is None:
-            # 从 dir_pairs 查找对应的目的目录
             for src_dir, dst_dir in self._dir_pairs.items():
                 if str(video_path).startswith(str(Path(src_dir))):
                     target_base = Path(dst_dir)
+                    source_base = Path(src_dir)
                     break
             if target_base is None:
                 return
+        else:
+            # 从 dir_pairs 查找对应的源目录
+            source_base = None
+            for src_dir, dst_dir in self._dir_pairs.items():
+                if str(video_path).startswith(str(Path(src_dir))):
+                    source_base = Path(src_dir)
+                    break
         if self._skip_existing and self._find_existing(stem, target_base):
             return
         results = self._metatube_search(stem)
@@ -316,9 +304,16 @@ class MetaTubeScraper(_PluginBase):
         title = full.get("title", movie.get("title", stem))
         number = full.get("number", stem)
         num_clean = re.sub(r'[\\\\/:*?\"<>|]', "_", number)
-        sub_path = self._get_category_path(full, num_clean)
-        dest_dir = target_base / "电影" / sub_path
-        # 自动改名：番号.后缀
+        # 保持源目录结构，只把文件名改为番号
+        if source_base:
+            rel_dir = video_path.parent.relative_to(source_base)
+            # 如果父目录名包含番号，不重复创建子目录
+            if num_clean.lower() in video_path.parent.name.lower():
+                dest_dir = target_base / rel_dir
+            else:
+                dest_dir = target_base / rel_dir / num_clean
+        else:
+            dest_dir = target_base / num_clean
         new_name = f"{num_clean}{video_path.suffix}"
         dest_path = dest_dir / new_name
         if dest_path.exists():
@@ -659,10 +654,9 @@ class MetaTubeScraper(_PluginBase):
                                         'content': [{
                                             'component': 'VRow', 'props': {'dense': True},
                                             'content': [
-                                                {'component': 'VCol', 'props': {'cols': 12, 'md': 3}, 'content': [{'component': 'VSwitch', 'props': {'model': 'scrape_enabled', 'label': '番号刮削模式', 'color': 'primary', 'hideDetails': True, 'density': 'compact'}}]},
-                                                {'component': 'VCol', 'props': {'cols': 12, 'md': 3}, 'content': [{'component': 'VSelect', 'props': {'model': 'organize_mode', 'label': '整理方式', 'items': [{'title': '复制文件', 'value': 'copy'}, {'title': '创建软链接', 'value': 'softlink'}], 'hideDetails': True, 'density': 'compact'}}]},
-                                                {'component': 'VCol', 'props': {'cols': 12, 'md': 3}, 'content': [{'component': 'VSelect', 'props': {'model': 'scrape_category', 'label': '分类方式', 'items': [{'title': '按演员', 'value': 'actor'}, {'title': '按制作商', 'value': 'maker'}, {'title': '按类型', 'value': 'genre'}, {'title': '不分类', 'value': 'none'}], 'hideDetails': True, 'density': 'compact'}}]},
-                                                {'component': 'VCol', 'props': {'cols': 12, 'md': 3}, 'content': [{'component': 'VSelect', 'props': {'model': 'cover_type', 'label': '海报类型', 'items': [{'title': '主海报', 'value': 'primary'}, {'title': '缩略图', 'value': 'thumb'}], 'hideDetails': True, 'density': 'compact'}}]},
+                                                {'component': 'VCol', 'props': {'cols': 12, 'md': 4}, 'content': [{'component': 'VSwitch', 'props': {'model': 'scrape_enabled', 'label': '番号刮削模式', 'color': 'primary', 'hideDetails': True, 'density': 'compact'}}]},
+                                                {'component': 'VCol', 'props': {'cols': 12, 'md': 4}, 'content': [{'component': 'VSelect', 'props': {'model': 'organize_mode', 'label': '整理方式', 'items': [{'title': '复制文件', 'value': 'copy'}, {'title': '创建软链接', 'value': 'softlink'}], 'hideDetails': True, 'density': 'compact'}}]},
+                                                {'component': 'VCol', 'props': {'cols': 12, 'md': 4}, 'content': [{'component': 'VSelect', 'props': {'model': 'cover_type', 'label': '海报类型', 'items': [{'title': '主海报', 'value': 'primary'}, {'title': '缩略图', 'value': 'thumb'}], 'hideDetails': True, 'density': 'compact'}}]},
                                             ]
                                         }]
                                     },
@@ -687,8 +681,8 @@ class MetaTubeScraper(_PluginBase):
             "sync_extensions": ".strm, .mkv, .mp4, .avi, .ts, .iso, .nfo, .jpg, .png",
             "delete_sidecar": False,
             "sidecar_extensions": ".jpg, .nfo, .png, .srt, .ass, .sub",
-            "scrape_enabled": False, "scrape_category": "actor",
-            "metatube_url": "http://192.168.2.4:8900", "metatube_token": "",
+            "scrape_enabled": False,
+            "metatube_url": "http://192.168.2.4:8897", "metatube_token": "",
             "keyword_pattern": r"^[A-Za-z]{1,6}-\d{2,}(?:-[A-Z0-9]+)?$",
             "sync_extensions": ".strm, .mkv, .mp4, .avi, .ts, .iso, .nfo, .jpg, .png",
             "organize_mode": "copy",
