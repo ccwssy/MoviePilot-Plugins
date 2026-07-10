@@ -29,7 +29,7 @@ class MetaTubeScraper(_PluginBase):
     plugin_name = "MetaTube 刮削器"
     plugin_desc = "文件同步 + 番号刮削：监控源目录同步文件，或识别番号视频自动整理入库并写入 NFO 文件及海报。"
     plugin_icon = "metatube.png"
-    plugin_version = "1.6.0"
+    plugin_version = "1.5.2"
     plugin_author = "ccwssy"
     author_url = "https://github.com/ccwssy"
     plugin_config_prefix = "metatubescraper_"
