@@ -54,6 +54,8 @@ class MetaTubeScraper(_PluginBase):
     _scrape_enabled = False
     _metatube_url = "http://192.168.2.4:8897"
     _metatube_token = ""
+    _translate_enabled = False
+    _translate_engine = "GoogleFree"
     _keyword_pattern = r"^[A-Za-z]{1,6}-\d{2,}(?:-[A-Z0-9]+)?$"
     _sync_extensions = ".strm, .mkv, .mp4, .avi, .ts, .iso, .nfo, .jpg, .png"
     _organize_mode = "copy"
@@ -89,6 +91,8 @@ class MetaTubeScraper(_PluginBase):
         self._scrape_enabled = config.get("scrape_enabled", False)
         self._metatube_url = config.get("metatube_url", "http://192.168.2.4:8897").rstrip("/")
         self._metatube_token = config.get("metatube_token", "")
+        self._translate_enabled = config.get("translate_enabled", False)
+        self._translate_engine = config.get("translate_engine", "GoogleFree")
         self._keyword_pattern = config.get("keyword_pattern", r"^[A-Za-z]{1,6}-\d{2,}(?:-[A-Z0-9]+)?$")
         self._sync_extensions = config.get("sync_extensions", ".strm, .mkv, .mp4, .avi, .ts, .iso, .nfo, .jpg, .png")
         self._organize_mode = config.get("organize_mode", "copy")
@@ -118,6 +122,7 @@ class MetaTubeScraper(_PluginBase):
             "delete_sidecar": self._delete_sidecar, "sidecar_extensions": self._sidecar_extensions,
             "scrape_enabled": self._scrape_enabled,
             "metatube_url": self._metatube_url, "metatube_token": self._metatube_token,
+            "translate_enabled": self._translate_enabled, "translate_engine": self._translate_engine,
             "keyword_pattern": self._keyword_pattern,
             "organize_mode": self._organize_mode,
             "download_images": self._download_images, "cover_type": self._cover_type,
@@ -302,6 +307,12 @@ class MetaTubeScraper(_PluginBase):
             return
         full = self._metatube_get_movie(provider, movie_id) or movie
         title = full.get("title", movie.get("title", stem))
+        # 翻译标题
+        if self._translate_enabled and title:
+            translated = self._translate_text(title)
+            if translated:
+                logger.info(f"MetaTubeScraper: 翻译标题 {title[:30]} -> {translated[:30]}")
+                title = translated
         number = full.get("number", stem)
         num_clean = re.sub(r'[\\\\/:*?\"<>|]', "_", number)
         # 保持源目录结构，只把文件名改为番号
@@ -424,6 +435,14 @@ class MetaTubeScraper(_PluginBase):
             self._add_history(name, "数据不完整", False)
             return {"file": name, "title": "数据不完整", "success": False}
         full = self._metatube_get_movie(provider, movie_id) or movie
+        title = full.get("title", movie.get("title", ""))
+        # 翻译标题
+        if self._translate_enabled and title:
+            translated = self._translate_text(title)
+            if translated:
+                title = translated
+        # 用翻译后的标题构建 NFO
+        full["title"] = title
         nfo_path.write_text(self._build_nfo(full, stem), encoding="utf-8")
         if self._download_images:
             self._download_cover(provider, movie_id, parent, stem)
@@ -469,6 +488,26 @@ class MetaTubeScraper(_PluginBase):
                     (target_dir / save_name).write_bytes(resp.content)
             except Exception as e:
                 logger.error(f"下载图片异常 {cover_key}: {e}")
+
+    def _translate_text(self, text: str) -> Optional[str]:
+        """调用 MetaTube 翻译 API 将日文标题翻译为中文。"""
+        if not text:
+            return None
+        try:
+            resp = httpx.get(
+                f"{self._metatube_url}/v1/translate",
+                params={"q": text, "from": "auto", "to": "zh", "engine": self._translate_engine},
+                headers=self._mt_headers(),
+                timeout=30.0,
+            )
+            if resp.status_code == 200:
+                data = resp.json()
+                translated = data.get("data", {}).get("translatedText") or data.get("translatedText")
+                if translated and translated != text:
+                    return translated
+        except Exception as e:
+            logger.error(f"MetaTube 翻译异常: {e}")
+        return None
 
     def _build_nfo(self, info: dict, default_number: str) -> str:
         title = escape(info.get("title") or default_number)
@@ -665,7 +704,8 @@ class MetaTubeScraper(_PluginBase):
                                         'content': [
                                             {'component': 'VRow', 'content': [{'component': 'VCol', 'props': {'cols': 12, 'md': 6}, 'content': [{'component': 'VTextField', 'props': {'model': 'metatube_url', 'label': 'MetaTube 地址', 'placeholder': 'http://192.168.2.4:8900', 'hideDetails': True, 'density': 'compact'}}]}, {'component': 'VCol', 'props': {'cols': 12, 'md': 6}, 'content': [{'component': 'VTextField', 'props': {'model': 'metatube_token', 'label': 'Token（可选）', 'placeholder': '未设置则留空', 'hideDetails': True, 'density': 'compact'}}]}]},
                                             {'component': 'VRow', 'content': [{'component': 'VCol', 'props': {'cols': 12, 'md': 6}, 'content': [{'component': 'VTextField', 'props': {'model': 'keyword_pattern', 'label': '番号正则', 'placeholder': r"^[A-Za-z]{1,6}-\d{2,}", 'hideDetails': True, 'density': 'compact', 'persistentHint': True, 'hint': '文件名匹配番号正则的视频走刮削，其他走同步'}}]}]},
-                                            {'component': 'VRow', 'content': [{'component': 'VCol', 'props': {'cols': 12, 'md': 4}, 'content': [{'component': 'VSwitch', 'props': {'model': 'download_images', 'label': '下载海报', 'color': 'primary', 'hideDetails': True, 'density': 'compact'}}]}, {'component': 'VCol', 'props': {'cols': 12, 'md': 4}, 'content': [{'component': 'VSwitch', 'props': {'model': 'skip_existing', 'label': '跳过已有', 'color': 'primary', 'hideDetails': True, 'density': 'compact'}}]}]},
+                                            {'component': 'VRow', 'content': [{'component': 'VCol', 'props': {'cols': 12, 'md': 4}, 'content': [{'component': 'VSwitch', 'props': {'model': 'download_images', 'label': '下载海报', 'color': 'primary', 'hideDetails': True, 'density': 'compact'}}]}, {'component': 'VCol', 'props': {'cols': 12, 'md': 4}, 'content': [{'component': 'VSwitch', 'props': {'model': 'skip_existing', 'label': '跳过已有', 'color': 'primary', 'hideDetails': True, 'density': 'compact'}}]}, {'component': 'VCol', 'props': {'cols': 12, 'md': 4}, 'content': [{'component': 'VSwitch', 'props': {'model': 'translate_enabled', 'label': '标题翻译', 'color': 'primary', 'hideDetails': True, 'density': 'compact'}}]}]},
+                                            {'component': 'VRow', 'content': [{'component': 'VCol', 'props': {'cols': 12, 'md': 8, 'offset-md': 2}, 'content': [{'component': 'VSelect', 'props': {'model': 'translate_engine', 'label': '翻译引擎', 'items': [{'title': 'Google 免费', 'value': 'GoogleFree'}, {'title': 'Google 付费', 'value': 'Google'}, {'title': '百度', 'value': 'Baidu'}, {'title': 'DeepL', 'value': 'DeepL'}, {'title': 'OpenAI', 'value': 'OpenAi'}], 'hideDetails': True, 'density': 'compact'}}]}]},
                                         ]
                                     }
                                 ]
@@ -683,6 +723,7 @@ class MetaTubeScraper(_PluginBase):
             "sidecar_extensions": ".jpg, .nfo, .png, .srt, .ass, .sub",
             "scrape_enabled": False,
             "metatube_url": "http://192.168.2.4:8897", "metatube_token": "",
+            "translate_enabled": False, "translate_engine": "GoogleFree",
             "keyword_pattern": r"^[A-Za-z]{1,6}-\d{2,}(?:-[A-Z0-9]+)?$",
             "sync_extensions": ".strm, .mkv, .mp4, .avi, .ts, .iso, .nfo, .jpg, .png",
             "organize_mode": "copy",
