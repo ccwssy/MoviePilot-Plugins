@@ -28,7 +28,7 @@ class StrmLinkChecker(_PluginBase):
     plugin_name = "Strm失效清理"
     plugin_desc = "通过转移记录对比Emby媒体库STRM文件与源STRM文件，如果源文件已删除，同步清理Emby条目及附属文件。"
     plugin_icon = "strmcheck.png"
-    plugin_version = "1.1.8"
+    plugin_version = "1.1.9"
     plugin_author = "ccwssy"
     author_url = "https://github.com/ccwssy/MoviePilot-Plugins"
     plugin_config_prefix = "strmlinkchecker_"
@@ -895,8 +895,27 @@ class StrmLinkChecker(_PluginBase):
                                 # 计算剩余天数
                                 if self._url_check_cache_expiry == 0:
                                     action_text = f"跳过(缓存命中·无限期,上次状态:{cached_status})"
+                                    total_url_cached += 1
+                                    # 覆盖之前保存的"待URL检查"记录
+                                    history = self.get_data('history') or []
+                                    history = [h for h in history
+                                               if not (h.get("strm_path") == strm_path
+                                                       and h.get("action") == "待URL检查")]
+                                    history.append({
+                                        "strm_path": strm_path,
+                                        "source_url": "",
+                                        "status": "无转移记录",
+                                        "action": action_text,
+                                        "title": "",
+                                        "check_time": time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
+                                    })
+                                    self.save_data('history', history)
+                                    continue
                                 elif cache_expired:
-                                    action_text = f"跳过(缓存已过期,上次状态:{cached_status})"
+                                    # 缓存已过期，清除缓存条目，继续执行URL检查
+                                    logger.info(f"URL检查缓存已过期，重新检查: {strm_path}")
+                                    cache.pop(strm_path, None)
+                                    self.save_data('url_check_cache', cache)
                                 elif round_completed_at:
                                     try:
                                         round_time = datetime.strptime(round_completed_at, "%Y-%m-%d %H:%M:%S")
@@ -905,24 +924,40 @@ class StrmLinkChecker(_PluginBase):
                                         action_text = f"跳过(缓存命中·剩余{remain}天,上次状态:{cached_status})"
                                     except ValueError:
                                         action_text = f"跳过(缓存命中,上次状态:{cached_status})"
+                                    total_url_cached += 1
+                                    # 覆盖之前保存的"待URL检查"记录
+                                    history = self.get_data('history') or []
+                                    history = [h for h in history
+                                               if not (h.get("strm_path") == strm_path
+                                                       and h.get("action") == "待URL检查")]
+                                    history.append({
+                                        "strm_path": strm_path,
+                                        "source_url": "",
+                                        "status": "无转移记录",
+                                        "action": action_text,
+                                        "title": "",
+                                        "check_time": time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
+                                    })
+                                    self.save_data('history', history)
+                                    continue
                                 else:
                                     action_text = f"跳过(缓存命中,上次状态:{cached_status})"
-                                total_url_cached += 1
-                                # 覆盖之前保存的"待URL检查"记录
-                                history = self.get_data('history') or []
-                                history = [h for h in history
-                                           if not (h.get("strm_path") == strm_path
-                                                   and h.get("action") == "待URL检查")]
-                                history.append({
-                                    "strm_path": strm_path,
-                                    "source_url": "",
-                                    "status": "无转移记录",
-                                    "action": action_text,
-                                    "title": "",
-                                    "check_time": time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
-                                })
-                                self.save_data('history', history)
-                                continue
+                                    total_url_cached += 1
+                                    # 覆盖之前保存的"待URL检查"记录
+                                    history = self.get_data('history') or []
+                                    history = [h for h in history
+                                               if not (h.get("strm_path") == strm_path
+                                                       and h.get("action") == "待URL检查")]
+                                    history.append({
+                                        "strm_path": strm_path,
+                                        "source_url": "",
+                                        "status": "无转移记录",
+                                        "action": action_text,
+                                        "title": "",
+                                        "check_time": time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
+                                    })
+                                    self.save_data('history', history)
+                                    continue
                         # 缓存未命中，启动URL检查线程
                         url_need_check_count += 1
                         t = threading.Thread(target=url_check_worker, args=(strm_path,))
