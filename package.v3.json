@@ -3,12 +3,12 @@
     "name": "Strm失效清理",
     "description": "通过转移记录对比Emby媒体库STRM文件与源STRM文件，如果源文件已删除，同步清理Emby条目及附属文件。支持对无转移记录的STRM文件进行URL可用性检查（风险功能）。",
     "labels": "STRM,源链接,检查,清理,URL检查",
-    "version": "1.1.9",
-    "v3": false,
+    "version": "2.0.0",
     "icon": "strmcheck.png",
     "author": "ccwssy",
     "level": 2,
     "history": {
+      "v2.0.0": "MoviePilot V3 专用大版本：迁移至 plugins.v3，导入改用 app.sdk 稳定出口，整理记录查询统一走宿主 TransferHistoryOper，移除直接数据库会话",
       "v1.0.0": "初始版本，基于v2.0.0重构版本号体系",
       "v1.0.1": "改为通过转移记录src字段查找源STRM文件",
       "v1.0.2": "修正配置项说明，明确路径为MP2容器内路径",
@@ -31,23 +31,7 @@
       "1.1.7": "缓存有效期改为基于轮次完成时间计算剩余天数，一轮检查完才启动缓存计时",
       "1.1.8": "修复全部命中缓存时轮次完成时间未初始化导致通知显示异常",
       "1.1.9": "修复缓存过期后未重新检查URL，仅显示已过期并跳过的问题"
-    }
-  },
-  "MetaTubeScraper": {
-    "name": "MetaTube 刮削器",
-    "description": "文件同步 + 番号刮削：监控源目录同步文件，或识别番号视频自动整理入库并写入 NFO 文件及海报。",
-    "labels": "文件同步,番号刮削,MetaTube,JAV,NFO,海报",
-    "version": "1.5.2",
-    "icon": "metatube.png",
-    "author": "ccwssy",
-    "level": 1,
-    "history": {
-      "v1.5.2": "保留文件名标签(-C/-UC/uncensored)，标题格式改为 {番号} {标题}",
-      "v1.5.0": "新增标题翻译功能，支持多引擎和 API Key 参数传递",
-      "v1.4.0": "整合文件同步与番号刮削，保持源目录结构，修复 MetaTube API 地址",
-      "v1.2.0": "重构：使用 ChainEventType.NameRecognize 链式事件",
-      "v1.1.0": "新增 NameRecognize 辅助识别",
-      "v1.0.0": "初始版本"
-    }
+    },
+    "system_version": ">=3.0.0"
   }
 }
