@@ -28,7 +28,7 @@ class StrmLinkChecker(_PluginBase):
     plugin_name = "Strm失效清理"
     plugin_desc = "通过转移记录对比Emby媒体库STRM文件与源STRM文件，如果源文件已删除，同步清理Emby条目及附属文件。"
     plugin_icon = "strmcheck.png"
-    plugin_version = "2.3.1"
+    plugin_version = "2.3.2"
     plugin_author = "ccwssy"
     author_url = "https://github.com/ccwssy/MoviePilot-Plugins"
     plugin_config_prefix = "strmlinkchecker_"
@@ -183,97 +183,72 @@ class StrmLinkChecker(_PluginBase):
         插件配置表单
         """
 
-        def section_title(title: str, chip_text: str = "", chip_color: str = "primary"):
-            """分区标题：标题 + 可选标签"""
+        def tip(text: str):
+            """浅色说明文字"""
+            return {
+                'component': 'div',
+                'props': {'class': 'text-caption text-medium-emphasis'},
+                'text': text
+            }
+
+        def group(title: str, caption: str = ""):
+            """分组标题（含可选说明）"""
             content = [
                 {
                     'component': 'div',
-                    'props': {'class': 'text-subtitle-1 font-weight-bold'},
+                    'props': {'class': 'text-subtitle-2 font-weight-bold'},
                     'text': title
                 }
             ]
-            if chip_text:
-                content.append({
-                    'component': 'VChip',
-                    'props': {
-                        'size': 'x-small',
-                        'variant': 'tonal',
-                        'color': chip_color,
-                        'label': True
-                    },
-                    'text': chip_text
-                })
-            return content
-
-        def card(title: str, chip_text: str, chip_color: str, body: list):
-            """统一卡片：标题行 + 内容区"""
-            return {
-                'component': 'VCard',
-                'props': {'variant': 'outlined'},
-                'content': [
-                    {
-                        'component': 'VCardTitle',
-                        'props': {
-                            'class': 'pa-4 pb-1 d-flex align-center flex-wrap',
-                            'style': 'gap: 8px;'
-                        },
-                        'content': section_title(title, chip_text, chip_color)
-                    },
-                    {
-                        'component': 'VCardText',
-                        'props': {'class': 'pa-4 pt-2'},
-                        'content': body
-                    }
-                ]
-            }
-
-        def row(columns: list, dense: bool = True):
+            if caption:
+                content.append(tip(caption))
             return {
                 'component': 'VRow',
-                'props': {'dense': dense},
-                'content': columns
-            }
-
-        def col(component: str, props: dict, cols: int = 12, md: int = None, sm: int = None):
-            size_props = {'cols': cols}
-            if md:
-                size_props['md'] = md
-            if sm:
-                size_props['sm'] = sm
-            return {
-                'component': 'VCol',
-                'props': size_props,
+                'props': {'class': 'mb-1'},
                 'content': [
                     {
-                        'component': component,
-                        'props': props
+                        'component': 'VCol',
+                        'props': {'cols': 12},
+                        'content': content
                     }
                 ]
             }
 
-        def switch(model: str, label: str, color: str = "primary", extra: dict = None):
-            props = {
-                'model': model,
-                'label': label,
-                'color': color,
-                'hideDetails': True,
-                'density': 'compact'
+        def switch_field(model: str, label: str, color: str = 'primary',
+                         cols: int = 12, md: int = 4):
+            """开关字段"""
+            return {
+                'component': 'VCol',
+                'props': {'cols': cols, 'md': md, 'sm': 6},
+                'content': [
+                    {
+                        'component': 'VSwitch',
+                        'props': {
+                            'model': model,
+                            'label': label,
+                            'color': color,
+                            'hideDetails': True,
+                            'density': 'comfortable'
+                        }
+                    }
+                ]
             }
-            if extra:
-                props.update(extra)
-            return col('VSwitch', props, cols=12, md=4, sm=4)
 
-        def text_field(model: str, label: str, hint: str = "",
-                       field_type: str = None, suffix: str = "",
-                       placeholder: str = "", rows: int = 0,
-                       cols: int = 12, md: int = None, sm: int = None,
-                       min_value: int = None, max_value: int = None):
+        def input_field(model: str, label: str, cols: int = 12,
+                        md: int = None, sm: int = None, hint: str = "",
+                        field_type: str = None, suffix: str = "",
+                        placeholder: str = "", rows: int = 0,
+                        min_value: int = None, max_value: int = None):
+            """输入字段"""
             props = {
                 'model': model,
                 'label': label,
-                'hideDetails': True,
-                'density': 'compact'
+                'variant': 'outlined',
+                'density': 'comfortable',
+                'hideDetails': 'auto'
             }
+            if hint:
+                props['hint'] = hint
             if field_type:
                 props['type'] = field_type
             if suffix:
@@ -284,204 +259,117 @@ class StrmLinkChecker(_PluginBase):
                 props['min'] = min_value
             if max_value is not None:
                 props['max'] = max_value
-            if hint:
-                props['persistentHint'] = True
-                props['hint'] = hint
             if rows:
                 props['rows'] = rows
-            return col('VTextarea' if rows else 'VTextField', props,
-                       cols=cols, md=md, sm=sm)
-
-        def hint_text(text: str):
+            size_props = {'cols': cols}
+            if md:
+                size_props['md'] = md
+            if sm:
+                size_props['sm'] = sm
             return {
-                'component': 'div',
-                'props': {'class': 'text-caption text-medium-emphasis mb-3'},
-                'text': text
+                'component': 'VCol',
+                'props': size_props,
+                'content': [
+                    {
+                        'component': 'VTextarea' if rows else 'VTextField',
+                        'props': props
+                    }
+                ]
             }
 
-        def alert(alert_type: str, text: str, extra_class: str = "mb-3"):
+        def row(columns: list, margin: str = 'mb-4'):
+            """字段行"""
             return {
-                'component': 'VAlert',
-                'props': {
-                    'type': alert_type,
-                    'variant': 'tonal',
-                    'density': 'compact',
-                    'class': extra_class,
-                    'text': text
-                }
+                'component': 'VRow',
+                'props': {'class': margin},
+                'content': columns
             }
 
         return [
             {
                 'component': 'VForm',
                 'content': [
+                    # ===== 顶部说明 =====
+                    {
+                        'component': 'VRow',
+                        'props': {'class': 'mb-5'},
+                        'content': [
+                            {
+                                'component': 'VCol',
+                                'props': {'cols': 12},
+                                'content': [
+                                    tip('通过转移记录核对入库 STRM 与源文件；源路径失效时先做 URL 探测，仅确认链接失效（404/410）才执行清理。')
+                                ]
+                            }
+                        ]
+                    },
                     # ===== 基本设置 =====
-                    {
-                        'component': 'VRow',
-                        'content': [
-                            {
-                                'component': 'VCol',
-                                'props': {'cols': 12},
-                                'content': [
-                                    card(
-                                        '基本设置', 'V3 专用', 'primary',
-                                        [
-                                            hint_text('按周期扫描入库 STRM，源文件缺失时通过 Emby API 清理对应条目。'),
-                                            row([
-                                                switch('enabled', '启用插件'),
-                                                switch('onlyonce', '保存后立即运行一次'),
-                                                switch('notify', '发送通知')
-                                            ]),
-                                            row([
-                                                text_field('cron', '执行周期', rows=0,
-                                                           placeholder='0 6 * * *',
-                                                           hint='5 位 cron 表达式，留空则仅手动触发',
-                                                           cols=12, md=6)
-                                            ]),
-                                            row([
-                                                text_field('strm_path', 'STRM 目录', rows=2,
-                                                           placeholder='/clouddata/movies/云盘（一行一个目录）',
-                                                           hint='MoviePilot 容器内入库后的 STRM 目录，支持多行')
-                                            ])
-                                        ]
-                                    )
-                                ]
-                            }
-                        ]
-                    },
+                    group('基本设置'),
+                    row([
+                        switch_field('enabled', '启用插件'),
+                        switch_field('onlyonce', '保存后立即运行一次'),
+                        switch_field('notify', '发送通知')
+                    ]),
+                    row([
+                        input_field('cron', '执行周期', md=4,
+                                    placeholder='0 6 * * *',
+                                    hint='5 位 cron 表达式，留空则仅手动触发'),
+                        input_field('strm_path', 'STRM 目录', md=8, rows=3,
+                                    placeholder='/clouddata/movies/云盘（一行一个目录）',
+                                    hint='MoviePilot 容器内入库后的 STRM 目录，支持多行')
+                    ], margin='mb-6'),
                     # ===== 清理动作 =====
-                    {
-                        'component': 'VRow',
-                        'content': [
-                            {
-                                'component': 'VCol',
-                                'props': {'cols': 12},
-                                'content': [
-                                    card(
-                                        '清理动作', '不可逆', 'error',
-                                        [
-                                            alert('warning', '仅当链接确认失效（HTTP 404/410）时才执行清理；建议先手动运行一次确认结果。'),
-                                            row([
-                                                switch('delete_strm', '删除失效 STRM', color='error'),
-                                                switch('delete_sidecar', '删除附属文件 jpg/nfo', color='error'),
-                                                switch('delete_history', '删除整理记录', color='error')
-                                            ])
-                                        ]
-                                    )
-                                ]
-                            }
-                        ]
-                    },
+                    group('清理动作', '仅在链接确认失效时生效，操作不可逆，建议先手动运行一次确认结果。'),
+                    row([
+                        switch_field('delete_strm', '删除失效 STRM', color='error'),
+                        switch_field('delete_sidecar', '删除附属文件 jpg/nfo', color='error'),
+                        switch_field('delete_history', '删除整理记录', color='error')
+                    ], margin='mb-6'),
                     # ===== 备份保留策略 =====
-                    {
-                        'component': 'VRow',
-                        'content': [
-                            {
-                                'component': 'VCol',
-                                'props': {'cols': 12},
-                                'content': [
-                                    card(
-                                        '备份保留策略', '可追溯', 'info',
-                                        [
-                                            hint_text('删除整理记录前先备份快照到插件数据 deleted_history_backup，两种保留方式二选一。'),
-                                            row([
-                                                switch('backup_by_days', '按天数保留（关闭则按条数）')
-                                            ]),
-                                            row([
-                                                text_field('backup_keep_count', '保留条数', field_type='number',
-                                                           suffix='条', min_value=50, max_value=5000,
-                                                           placeholder='500', hint='按条数模式生效',
-                                                           cols=12, md=6),
-                                                text_field('backup_keep_days', '保留天数', field_type='number',
-                                                           suffix='天', min_value=1, max_value=3650,
-                                                           placeholder='90',
-                                                           hint='按天数模式生效，另设 5000 条硬上限',
-                                                           cols=12, md=6)
-                                            ])
-                                        ]
-                                    )
-                                ]
-                            }
-                        ]
-                    },
+                    group('备份保留策略', '删除整理记录前先备份快照到插件数据，便于事后追溯；两种保留方式二选一。'),
+                    row([
+                        switch_field('backup_by_days', '按天数保留（关闭则按条数）')
+                    ], margin='mb-2'),
+                    row([
+                        input_field('backup_keep_count', '保留条数', md=4,
+                                    field_type='number', suffix='条',
+                                    min_value=50, max_value=5000,
+                                    placeholder='500',
+                                    hint='按条数模式生效'),
+                        input_field('backup_keep_days', '保留天数', md=4,
+                                    field_type='number', suffix='天',
+                                    min_value=1, max_value=3650,
+                                    placeholder='90',
+                                    hint='按天数模式生效，另设 5000 条硬上限')
+                    ], margin='mb-6'),
                     # ===== Emby 连接 =====
-                    {
-                        'component': 'VRow',
-                        'content': [
-                            {
-                                'component': 'VCol',
-                                'props': {'cols': 12},
-                                'content': [
-                                    card(
-                                        'Emby 连接', '', '',
-                                        [
-                                            hint_text('留空则使用系统配置的媒体服务器。'),
-                                            row([
-                                                text_field('emby_host', 'Emby 地址',
-                                                           placeholder='http://192.168.1.100:8096',
-                                                           cols=12, md=6),
-                                                text_field('emby_apikey', 'Emby API Key',
-                                                           placeholder='Emby API 密钥',
-                                                           cols=12, md=6)
-                                            ])
-                                        ]
-                                    )
-                                ]
-                            }
-                        ]
-                    },
+                    group('Emby 连接', '留空则使用系统配置的媒体服务器。'),
+                    row([
+                        input_field('emby_host', 'Emby 地址', md=6,
+                                    placeholder='http://192.168.1.100:8096'),
+                        input_field('emby_apikey', 'Emby API Key', md=6,
+                                    placeholder='Emby API 密钥')
+                    ], margin='mb-6'),
                     # ===== URL 可用性检查 =====
-                    {
-                        'component': 'VRow',
-                        'content': [
-                            {
-                                'component': 'VCol',
-                                'props': {'cols': 12},
-                                'content': [
-                                    {
-                                        'component': 'VCard',
-                                        'props': {'variant': 'outlined'},
-                                        'content': [
-                                            {
-                                                'component': 'VCardTitle',
-                                                'props': {
-                                                    'class': 'pa-4 pb-1 d-flex align-center flex-wrap',
-                                                    'style': 'gap: 8px;'
-                                                },
-                                                'content': section_title('URL 可用性检查', '风险功能', 'error')
-                                            },
-                                            {
-                                                'component': 'VCardText',
-                                                'props': {'class': 'pa-4 pt-2'},
-                                                'content': [
-                                                    row([
-                                                        switch('url_check_enabled', '启用 URL 可用性检查', color='error')
-                                                    ]),
-                                                    alert('error', '对无转移记录、以及源路径失效的 STRM 发起 HTTP 探测：仅 404/410 判定失效，403/429/5xx 与网络异常视为不确定并保留。可能触发网盘风控，请严格控制频率。'),
-                                                    row([
-                                                        text_field('url_check_threads', '线程数', field_type='number',
-                                                                   suffix='个', min_value=1, max_value=3,
-                                                                   placeholder='1', cols=12, md=3, sm=6),
-                                                        text_field('url_check_cooldown', '请求间隔', field_type='number',
-                                                                   suffix='秒', min_value=3, max_value=60,
-                                                                   placeholder='10', cols=12, md=3, sm=6),
-                                                        text_field('url_check_daily_limit', '每日上限', field_type='number',
-                                                                   suffix='次', min_value=10, max_value=500,
-                                                                   placeholder='200', cols=12, md=3, sm=6),
-                                                        text_field('url_check_cache_expiry', '缓存有效期', field_type='number',
-                                                                   suffix='天', min_value=0,
-                                                                   placeholder='7',
-                                                                   hint='0 表示无限期',
-                                                                   cols=12, md=3, sm=6)
-                                                    ])
-                                                ]
-                                            }
-                                        ]
-                                    }
-                                ]
-                            }
-                        ]
-                    }
+                    group('URL 可用性检查', '仅 404/410 判定失效；403/429/5xx 与网络异常视为不确定并保留。可能触发网盘风控，请严格控制频率。'),
+                    row([
+                        switch_field('url_check_enabled', '启用 URL 可用性检查', color='error')
+                    ], margin='mb-2'),
+                    row([
+                        input_field('url_check_threads', '线程数', md=3,
+                                    field_type='number', suffix='个',
+                                    min_value=1, max_value=3, placeholder='1'),
+                        input_field('url_check_cooldown', '请求间隔', md=3,
+                                    field_type='number', suffix='秒',
+                                    min_value=3, max_value=60, placeholder='10'),
+                        input_field('url_check_daily_limit', '每日上限', md=3,
+                                    field_type='number', suffix='次',
+                                    min_value=10, max_value=500, placeholder='200'),
+                        input_field('url_check_cache_expiry', '缓存有效期', md=3,
+                                    field_type='number', suffix='天',
+                                    min_value=0, placeholder='7',
+                                    hint='0 表示无限期')
+                    ], margin='mb-2')
                 ]
             }
         ], {
