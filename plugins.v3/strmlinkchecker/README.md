@@ -1,6 +1,6 @@
 # Strm失效清理
 
-> **MoviePilot V3 专用版本（v2.3.0）**，要求 MoviePilot >= 3.0.0。V2 用户请使用仓库 `plugins.v2` 目录下的 v1.1.9 版本。
+> **MoviePilot V3 专用版本（v2.3.1）**，要求 MoviePilot >= 3.0.0。V2 用户请使用仓库 `plugins.v2` 目录下的 v1.1.9 版本。
 
 ## 概述
 
