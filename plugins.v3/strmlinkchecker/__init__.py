@@ -28,7 +28,7 @@ class StrmLinkChecker(_PluginBase):
     plugin_name = "Strm失效清理"
     plugin_desc = "通过转移记录对比Emby媒体库STRM文件与源STRM文件，如果源文件已删除，同步清理Emby条目及附属文件。"
     plugin_icon = "strmcheck.png"
-    plugin_version = "2.1.0"
+    plugin_version = "2.2.0"
     plugin_author = "ccwssy"
     author_url = "https://github.com/ccwssy/MoviePilot-Plugins"
     plugin_config_prefix = "strmlinkchecker_"
@@ -784,6 +784,7 @@ class StrmLinkChecker(_PluginBase):
             total_duplicate_strm = 0
             total_url_dead = 0
             total_url_alive = 0
+            total_url_unknown = 0
             total_url_skipped = 0
             total_url_cached = 0
             failed_items = []
@@ -822,6 +823,7 @@ class StrmLinkChecker(_PluginBase):
                                  transfer_his=None):
                 """URL检查工作线程；源路径失效项在URL确认不可用后才执行清理"""
                 nonlocal total_url_dead, total_url_alive, total_url_skipped, total_url_cached
+                nonlocal total_url_unknown
                 nonlocal total_dead, total_deleted_emby, total_deleted_strm, total_deleted_sidecar
                 nonlocal total_src_missing_kept
                 with url_check_sem:
@@ -840,6 +842,8 @@ class StrmLinkChecker(_PluginBase):
                                 total_url_dead += 1
                             elif result.get("url_alive"):
                                 total_url_alive += 1
+                            elif result.get("url_unknown"):
+                                total_url_unknown += 1
                             else:
                                 total_url_skipped += 1
                         if category == "源文件缺失":
@@ -934,7 +938,8 @@ class StrmLinkChecker(_PluginBase):
                                 sm_cached_status = cached_entry.get("status", "未知")
                                 if (abs(cached_entry.get("mtime", 0) - sm_mtime) < 0.001
                                         and not sm_cache_expired):
-                                    if sm_cached_status == "失效":
+                                    if (sm_cached_status == "失效"
+                                            and cached_entry.get("judge") == "strict"):
                                         sm_cleanup = self.__cleanup_missing_source(
                                             strm_path=strm_path,
                                             transfer_his=result.get("transfer_his"),
@@ -960,6 +965,18 @@ class StrmLinkChecker(_PluginBase):
                                         self.__save_check_record(
                                             strm_path, "", "源文件缺失",
                                             "源路径失效且URL不可用(缓存命中), " + ", ".join(sm_actions),
+                                            title=Path(strm_path).stem
+                                        )
+                                        continue
+                                    if sm_cached_status == "失效":
+                                        # 缓存中的"失效"来自旧的宽松判定，一律作废：
+                                        # 清除缓存并保留文件，下一轮用实时探测重新确认
+                                        cache.pop(strm_path, None)
+                                        self.save_data('url_check_cache', cache)
+                                        total_src_missing_kept += 1
+                                        self.__save_check_record(
+                                            strm_path, "", "疑似移动",
+                                            "缓存判定失效已作废(需实时复检), 已保留",
                                             title=Path(strm_path).stem
                                         )
                                         continue
@@ -1143,6 +1160,7 @@ class StrmLinkChecker(_PluginBase):
                     msg_lines.append(f"🌐 URL可用性检查")
                     msg_lines.append(f"  ├ 链接有效: {total_url_alive} 个")
                     msg_lines.append(f"  ├ 链接失效: {total_url_dead} 个")
+                    msg_lines.append(f"  ├ 状态不确定(保留): {total_url_unknown} 个")
                     msg_lines.append(f"  ├ 缓存跳过: {total_url_cached} 个")
                     msg_lines.append(f"  ├ 跳过(已达上限): {total_url_skipped} 个")
                     msg_lines.append(f"  └ 缓存有效期: {cache_expiry_text}")
@@ -1161,6 +1179,7 @@ class StrmLinkChecker(_PluginBase):
                         f"扫描{total_checked}个, "
                         f"源文件缺失{total_dead}个(无记录{total_no_record}), "
                         f"疑似移动保留{total_src_missing_kept}个, "
+                        f"URL状态不确定{total_url_unknown}个, "
                         f"删除Emby{total_deleted_emby}个, "
                         f"删除STRM{total_deleted_strm}个, "
                         f"删除附属文件{total_deleted_sidecar}个, "
@@ -1327,11 +1346,12 @@ class StrmLinkChecker(_PluginBase):
             if emby_ok:
                 result["emby_deleted"] = True
 
-            # 删除整理记录
+            # 删除整理记录（删除前先备份快照，便于事后追溯与恢复）
             if self._delete_history and transfer_his is not None:
                 try:
+                    self.__backup_transfer_history(transfer_his)
                     self._transferhis.delete(transfer_his.id)
-                    logger.info(f"已删除整理记录: {transfer_his.id}")
+                    logger.info(f"已删除整理记录: {transfer_his.id}（快照已备份）")
                 except Exception as e:
                     logger.error(f"删除整理记录失败: {e}")
 
@@ -1352,6 +1372,31 @@ class StrmLinkChecker(_PluginBase):
         except Exception as e:
             logger.error(f"清理失效STRM异常 {strm_path}: {e}")
         return result
+
+    def __backup_transfer_history(self, transfer_his) -> None:
+        """
+        删除整理记录前先备份快照，避免误判时溯源信息不可逆丢失
+        备份保存在插件数据 deleted_history_backup，最多保留 500 条
+        """
+        try:
+            snapshot = {
+                "id": getattr(transfer_his, "id", None),
+                "src": getattr(transfer_his, "src", "") or "",
+                "dest": getattr(transfer_his, "dest", "") or "",
+                "title": getattr(transfer_his, "title", "") or "",
+                "type": getattr(transfer_his, "type", "") or "",
+                "seasons": getattr(transfer_his, "seasons", "") or "",
+                "episodes": getattr(transfer_his, "episodes", "") or "",
+                "date": getattr(transfer_his, "date", "") or "",
+                "deleted_at": time.strftime("%Y-%m-%d %H:%M:%S", time.localtime()),
+            }
+            backup = self.get_data('deleted_history_backup') or []
+            backup.append(snapshot)
+            if len(backup) > 500:
+                backup = backup[-500:]
+            self.save_data('deleted_history_backup', backup)
+        except Exception as e:
+            logger.error(f"备份整理记录失败: {e}")
 
     def __check_duplicate_strm(self, strm_path: str,
                                transfer_his,
@@ -1484,6 +1529,7 @@ class StrmLinkChecker(_PluginBase):
             "strm_path": strm_path,
             "url_dead": False,
             "url_alive": False,
+            "url_unknown": False,
             "url": "",
             "cached": False,
         }
@@ -1540,30 +1586,46 @@ class StrmLinkChecker(_PluginBase):
             }
 
             # 使用HEAD请求（如果服务器不支持则降级为GET + Range）
-            try:
-                resp = requests.head(
-                    url,
-                    headers=headers,
-                    timeout=15,
-                    verify=False,
-                    allow_redirects=True,
-                )
-                status_code = resp.status_code
-            except requests.exceptions.RequestException:
-                # HEAD不支持时，用GET + Range只取第一个字节
-                resp = requests.get(
-                    url,
-                    headers=headers,
-                    timeout=15,
-                    verify=False,
-                    allow_redirects=True,
-                    stream=True,
-                )
-                status_code = resp.status_code
-                resp.close()
+            def probe_once():
+                """单次探测，返回HTTP状态码；网络异常返回 None"""
+                try:
+                    resp = requests.head(
+                        url,
+                        headers=headers,
+                        timeout=15,
+                        verify=False,
+                        allow_redirects=True,
+                    )
+                    return resp.status_code
+                except requests.exceptions.RequestException:
+                    # HEAD不支持时，用GET + Range只取第一个字节
+                    try:
+                        resp = requests.get(
+                            url,
+                            headers=headers,
+                            timeout=15,
+                            verify=False,
+                            allow_redirects=True,
+                            stream=True,
+                        )
+                        code = resp.status_code
+                        resp.close()
+                        return code
+                    except requests.exceptions.RequestException:
+                        return None
+
+            status_code = probe_once()
+            # 网络异常或服务端错误(5xx)时冷却后重试一次，避免瞬时故障造成误判
+            if status_code is None or status_code >= 500:
+                retry_wait = self._url_check_cooldown if self._url_check_cooldown >= 3 else 3
+                logger.info(f"URL探测异常或服务端错误，{retry_wait}秒后重试: {url[:100]}...")
+                time.sleep(retry_wait)
+                status_code = probe_once()
 
             # 2xx 或 3xx 或 416（Range请求不支持但文件存在）都视为有效
             url_ok = status_code in [200, 201, 204, 206, 301, 302, 303, 307, 308, 416]
+            # 仅 404/410 视为源文件确实不存在；401/403/429/5xx/网络异常一律视为不确定
+            url_missing = status_code in [404, 410]
 
             # 更新计数
             with self._url_check_count_lock:
@@ -1586,7 +1648,7 @@ class StrmLinkChecker(_PluginBase):
                     )
                 # 更新缓存
                 self.__update_url_check_cache(strm_path, current_mtime, "有效")
-            else:
+            elif url_missing:
                 logger.warning(f"URL不可用 [{status_code}]: {url[:100]}...")
                 result["url_dead"] = True
                 if category == "源文件缺失":
@@ -1601,8 +1663,25 @@ class StrmLinkChecker(_PluginBase):
                         f"URL不可用(HTTP {status_code})",
                         title=Path(strm_path).stem
                     )
-                # 更新缓存
-                self.__update_url_check_cache(strm_path, current_mtime, "失效")
+                # 更新缓存（严格判定：只有 404/410 才记录为失效）
+                self.__update_url_check_cache(strm_path, current_mtime, "失效", strict=True)
+            else:
+                # 401/403/429/5xx/网络异常等不确定状态：一律保留，不做清理
+                status_label = f"HTTP {status_code}" if status_code is not None else "网络异常"
+                logger.warning(f"URL状态不确定 [{status_label}]，保留: {url[:100]}...")
+                result["url_unknown"] = True
+                if category == "源文件缺失":
+                    self.__save_check_record(
+                        strm_path, url, "疑似移动",
+                        f"URL状态不确定({status_label})·源路径已失效但无法确认链接失效，已保留",
+                        title=Path(strm_path).stem
+                    )
+                else:
+                    self.__save_check_record(
+                        strm_path, url, "无转移记录",
+                        f"URL状态不确定({status_label})，已保留",
+                        title=Path(strm_path).stem
+                    )
 
         except Exception as e:
             logger.error(f"URL检查异常 {strm_path}: {str(e)}")
@@ -1618,14 +1697,17 @@ class StrmLinkChecker(_PluginBase):
 
         return result
 
-    def __update_url_check_cache(self, strm_path: str, mtime: float, status: str):
+    def __update_url_check_cache(self, strm_path: str, mtime: float, status: str,
+                                 strict: bool = False):
         """
         更新URL检查缓存，记录已检查过的STRM文件及其mtime
+        :param strict: 是否为收紧后的严格判定（仅 404/410 才算失效）
         """
         cache = self.get_data('url_check_cache') or {}
         cache[strm_path] = {
             "mtime": mtime,
             "status": status,
+            "judge": "strict" if strict else "",
             "checked_at": time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
         }
         # 限制缓存大小，最多保留10000条
