@@ -28,7 +28,7 @@ class StrmLinkChecker(_PluginBase):
     plugin_name = "Strm失效清理"
     plugin_desc = "通过转移记录对比Emby媒体库STRM文件与源STRM文件，如果源文件已删除，同步清理Emby条目及附属文件。"
     plugin_icon = "strmcheck.png"
-    plugin_version = "2.3.2"
+    plugin_version = "2.3.3"
     plugin_author = "ccwssy"
     author_url = "https://github.com/ccwssy/MoviePilot-Plugins"
     plugin_config_prefix = "strmlinkchecker_"
@@ -180,46 +180,23 @@ class StrmLinkChecker(_PluginBase):
 
     def get_form(self) -> Tuple[List[dict], Dict[str, Any]]:
         """
-        插件配置表单
+        插件配置表单（Tab 页 + 紧凑字段）
         """
 
         def tip(text: str):
             """浅色说明文字"""
             return {
                 'component': 'div',
-                'props': {'class': 'text-caption text-medium-emphasis'},
+                'props': {'class': 'text-caption text-medium-emphasis mb-3'},
                 'text': text
             }
 
-        def group(title: str, caption: str = ""):
-            """分组标题（含可选说明）"""
-            content = [
-                {
-                    'component': 'div',
-                    'props': {'class': 'text-subtitle-2 font-weight-bold'},
-                    'text': title
-                }
-            ]
-            if caption:
-                content.append(tip(caption))
-            return {
-                'component': 'VRow',
-                'props': {'class': 'mb-1'},
-                'content': [
-                    {
-                        'component': 'VCol',
-                        'props': {'cols': 12},
-                        'content': content
-                    }
-                ]
-            }
-
         def switch_field(model: str, label: str, color: str = 'primary',
-                         cols: int = 12, md: int = 4):
+                         md: int = 4):
             """开关字段"""
             return {
                 'component': 'VCol',
-                'props': {'cols': cols, 'md': md, 'sm': 6},
+                'props': {'cols': 12, 'md': md, 'sm': 6},
                 'content': [
                     {
                         'component': 'VSwitch',
@@ -228,23 +205,23 @@ class StrmLinkChecker(_PluginBase):
                             'label': label,
                             'color': color,
                             'hideDetails': True,
-                            'density': 'comfortable'
+                            'density': 'compact'
                         }
                     }
                 ]
             }
 
-        def input_field(model: str, label: str, cols: int = 12,
-                        md: int = None, sm: int = None, hint: str = "",
-                        field_type: str = None, suffix: str = "",
-                        placeholder: str = "", rows: int = 0,
-                        min_value: int = None, max_value: int = None):
+        def input_field(model: str, label: str, md: int = None,
+                        hint: str = "", field_type: str = None,
+                        suffix: str = "", placeholder: str = "",
+                        rows: int = 0, min_value: int = None,
+                        max_value: int = None):
             """输入字段"""
             props = {
                 'model': model,
                 'label': label,
                 'variant': 'outlined',
-                'density': 'comfortable',
+                'density': 'compact',
                 'hideDetails': 'auto'
             }
             if hint:
@@ -261,11 +238,9 @@ class StrmLinkChecker(_PluginBase):
                 props['max'] = max_value
             if rows:
                 props['rows'] = rows
-            size_props = {'cols': cols}
+            size_props = {'cols': 12}
             if md:
                 size_props['md'] = md
-            if sm:
-                size_props['sm'] = sm
             return {
                 'component': 'VCol',
                 'props': size_props,
@@ -277,102 +252,135 @@ class StrmLinkChecker(_PluginBase):
                 ]
             }
 
-        def row(columns: list, margin: str = 'mb-4'):
-            """字段行"""
+        def row(columns: list, margin: str = 'mb-3'):
             return {
                 'component': 'VRow',
                 'props': {'class': margin},
                 'content': columns
             }
 
+        def tab(title: str, value: str):
+            return {
+                'component': 'VTab',
+                'props': {'value': value},
+                'text': title
+            }
+
+        def tab_item(value: str, content: list):
+            return {
+                'component': 'VWindowItem',
+                'props': {'value': value},
+                'content': content
+            }
+
         return [
             {
                 'component': 'VForm',
                 'content': [
-                    # ===== 顶部说明 =====
+                    # ===== Tab 导航 =====
                     {
-                        'component': 'VRow',
-                        'props': {'class': 'mb-5'},
+                        'component': 'VTabs',
+                        'props': {
+                            'model': '_tabs',
+                            'fixed-tabs': True,
+                            'class': 'mb-4'
+                        },
                         'content': [
-                            {
-                                'component': 'VCol',
-                                'props': {'cols': 12},
-                                'content': [
-                                    tip('通过转移记录核对入库 STRM 与源文件；源路径失效时先做 URL 探测，仅确认链接失效（404/410）才执行清理。')
-                                ]
-                            }
+                            tab('基本', 'tab_basic'),
+                            tab('清理', 'tab_clean'),
+                            tab('备份', 'tab_backup'),
+                            tab('Emby', 'tab_emby'),
+                            tab('URL 检查', 'tab_url')
                         ]
                     },
-                    # ===== 基本设置 =====
-                    group('基本设置'),
-                    row([
-                        switch_field('enabled', '启用插件'),
-                        switch_field('onlyonce', '保存后立即运行一次'),
-                        switch_field('notify', '发送通知')
-                    ]),
-                    row([
-                        input_field('cron', '执行周期', md=4,
-                                    placeholder='0 6 * * *',
-                                    hint='5 位 cron 表达式，留空则仅手动触发'),
-                        input_field('strm_path', 'STRM 目录', md=8, rows=3,
-                                    placeholder='/clouddata/movies/云盘（一行一个目录）',
-                                    hint='MoviePilot 容器内入库后的 STRM 目录，支持多行')
-                    ], margin='mb-6'),
-                    # ===== 清理动作 =====
-                    group('清理动作', '仅在链接确认失效时生效，操作不可逆，建议先手动运行一次确认结果。'),
-                    row([
-                        switch_field('delete_strm', '删除失效 STRM', color='error'),
-                        switch_field('delete_sidecar', '删除附属文件 jpg/nfo', color='error'),
-                        switch_field('delete_history', '删除整理记录', color='error')
-                    ], margin='mb-6'),
-                    # ===== 备份保留策略 =====
-                    group('备份保留策略', '删除整理记录前先备份快照到插件数据，便于事后追溯；两种保留方式二选一。'),
-                    row([
-                        switch_field('backup_by_days', '按天数保留（关闭则按条数）')
-                    ], margin='mb-2'),
-                    row([
-                        input_field('backup_keep_count', '保留条数', md=4,
-                                    field_type='number', suffix='条',
-                                    min_value=50, max_value=5000,
-                                    placeholder='500',
-                                    hint='按条数模式生效'),
-                        input_field('backup_keep_days', '保留天数', md=4,
-                                    field_type='number', suffix='天',
-                                    min_value=1, max_value=3650,
-                                    placeholder='90',
-                                    hint='按天数模式生效，另设 5000 条硬上限')
-                    ], margin='mb-6'),
-                    # ===== Emby 连接 =====
-                    group('Emby 连接', '留空则使用系统配置的媒体服务器。'),
-                    row([
-                        input_field('emby_host', 'Emby 地址', md=6,
-                                    placeholder='http://192.168.1.100:8096'),
-                        input_field('emby_apikey', 'Emby API Key', md=6,
-                                    placeholder='Emby API 密钥')
-                    ], margin='mb-6'),
-                    # ===== URL 可用性检查 =====
-                    group('URL 可用性检查', '仅 404/410 判定失效；403/429/5xx 与网络异常视为不确定并保留。可能触发网盘风控，请严格控制频率。'),
-                    row([
-                        switch_field('url_check_enabled', '启用 URL 可用性检查', color='error')
-                    ], margin='mb-2'),
-                    row([
-                        input_field('url_check_threads', '线程数', md=3,
-                                    field_type='number', suffix='个',
-                                    min_value=1, max_value=3, placeholder='1'),
-                        input_field('url_check_cooldown', '请求间隔', md=3,
-                                    field_type='number', suffix='秒',
-                                    min_value=3, max_value=60, placeholder='10'),
-                        input_field('url_check_daily_limit', '每日上限', md=3,
-                                    field_type='number', suffix='次',
-                                    min_value=10, max_value=500, placeholder='200'),
-                        input_field('url_check_cache_expiry', '缓存有效期', md=3,
-                                    field_type='number', suffix='天',
-                                    min_value=0, placeholder='7',
-                                    hint='0 表示无限期')
-                    ], margin='mb-2')
+                    # ===== Tab 内容 =====
+                    {
+                        'component': 'VWindow',
+                        'props': {'model': '_tabs'},
+                        'content': [
+                            # 基本设置
+                            tab_item('tab_basic', [
+                                tip('按周期扫描入库 STRM，源文件缺失时通过 Emby API 清理对应条目。'),
+                                row([
+                                    switch_field('enabled', '启用插件'),
+                                    switch_field('onlyonce', '保存后立即运行一次'),
+                                    switch_field('notify', '发送通知')
+                                ]),
+                                row([
+                                    input_field('cron', '执行周期', md=4,
+                                                placeholder='0 6 * * *',
+                                                hint='5 位 cron 表达式，留空则仅手动触发'),
+                                    input_field('strm_path', 'STRM 目录', md=8, rows=3,
+                                                placeholder='/clouddata/movies/云盘（一行一个目录）',
+                                                hint='MoviePilot 容器内入库后的 STRM 目录，支持多行')
+                                ], margin='mb-2')
+                            ]),
+                            # 清理动作
+                            tab_item('tab_clean', [
+                                tip('仅在链接确认失效（HTTP 404/410）时生效，操作不可逆，建议先手动运行一次确认结果。'),
+                                row([
+                                    switch_field('delete_strm', '删除失效 STRM', color='error'),
+                                    switch_field('delete_sidecar', '删除附属文件 jpg/nfo', color='error'),
+                                    switch_field('delete_history', '删除整理记录', color='error')
+                                ], margin='mb-2')
+                            ]),
+                            # 备份保留策略
+                            tab_item('tab_backup', [
+                                tip('删除整理记录前先备份快照到插件数据，便于事后追溯；两种保留方式二选一。'),
+                                row([
+                                    switch_field('backup_by_days', '按天数保留（关闭则按条数）')
+                                ], margin='mb-2'),
+                                row([
+                                    input_field('backup_keep_count', '保留条数', md=4,
+                                                field_type='number', suffix='条',
+                                                min_value=50, max_value=5000,
+                                                placeholder='500',
+                                                hint='按条数模式生效'),
+                                    input_field('backup_keep_days', '保留天数', md=4,
+                                                field_type='number', suffix='天',
+                                                min_value=1, max_value=3650,
+                                                placeholder='90',
+                                                hint='按天数模式生效，另设 5000 条硬上限')
+                                ], margin='mb-2')
+                            ]),
+                            # Emby 连接
+                            tab_item('tab_emby', [
+                                tip('留空则使用系统配置的媒体服务器。'),
+                                row([
+                                    input_field('emby_host', 'Emby 地址', md=6,
+                                                placeholder='http://192.168.1.100:8096'),
+                                    input_field('emby_apikey', 'Emby API Key', md=6,
+                                                placeholder='Emby API 密钥')
+                                ], margin='mb-2')
+                            ]),
+                            # URL 可用性检查
+                            tab_item('tab_url', [
+                                row([
+                                    switch_field('url_check_enabled', '启用 URL 可用性检查', color='error')
+                                ], margin='mb-2'),
+                                tip('对无转移记录、以及源路径失效的 STRM 发起 HTTP 探测：仅 404/410 判定失效，403/429/5xx 与网络异常视为不确定并保留。可能触发网盘风控，请严格控制频率。'),
+                                row([
+                                    input_field('url_check_threads', '线程数', md=3,
+                                                field_type='number', suffix='个',
+                                                min_value=1, max_value=3, placeholder='1'),
+                                    input_field('url_check_cooldown', '请求间隔', md=3,
+                                                field_type='number', suffix='秒',
+                                                min_value=3, max_value=60, placeholder='10'),
+                                    input_field('url_check_daily_limit', '每日上限', md=3,
+                                                field_type='number', suffix='次',
+                                                min_value=10, max_value=500, placeholder='200'),
+                                    input_field('url_check_cache_expiry', '缓存有效期', md=3,
+                                                field_type='number', suffix='天',
+                                                min_value=0, placeholder='7',
+                                                hint='0 表示无限期')
+                                ], margin='mb-2')
+                            ])
+                        ]
+                    }
                 ]
             }
         ], {
+            "_tabs": "tab_basic",
             "enabled": False,
             "cron": "0 6 * * *",
             "onlyonce": False,
