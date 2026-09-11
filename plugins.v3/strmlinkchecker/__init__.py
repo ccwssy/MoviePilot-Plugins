@@ -28,7 +28,7 @@ class StrmLinkChecker(_PluginBase):
     plugin_name = "Strm失效清理"
     plugin_desc = "通过转移记录对比Emby媒体库STRM文件与源STRM文件，如果源文件已删除，同步清理Emby条目及附属文件。"
     plugin_icon = "strmcheck.png"
-    plugin_version = "2.2.0"
+    plugin_version = "2.3.0"
     plugin_author = "ccwssy"
     author_url = "https://github.com/ccwssy/MoviePilot-Plugins"
     plugin_config_prefix = "strmlinkchecker_"
@@ -62,6 +62,10 @@ class StrmLinkChecker(_PluginBase):
     # 本轮检查中实际发起HTTP请求的URL数量（用于判断轮次是否完成）
     _url_check_round_checked_count = 0
     _url_check_round_total_count = 0
+    # 整理记录备份保留策略（二选一：按条数 / 按天数）
+    _backup_by_days = False
+    _backup_keep_count = 500
+    _backup_keep_days = 90
 
     def init_plugin(self, config: dict = None):
         self._transferhis = TransferHistoryOper()
@@ -86,6 +90,10 @@ class StrmLinkChecker(_PluginBase):
             self._url_check_cooldown = int(config.get("url_check_cooldown", 5))
             self._url_check_daily_limit = int(config.get("url_check_daily_limit", 50))
             self._url_check_cache_expiry = int(config.get("url_check_cache_expiry", 0))
+            # 备份保留策略（二选一）
+            self._backup_by_days = config.get("backup_by_days", False)
+            self._backup_keep_count = int(config.get("backup_keep_count", 500) or 500)
+            self._backup_keep_days = int(config.get("backup_keep_days", 90) or 90)
 
         if self._enabled:
             if self._onlyonce:
@@ -111,6 +119,9 @@ class StrmLinkChecker(_PluginBase):
                     "url_check_cooldown": self._url_check_cooldown,
                     "url_check_daily_limit": self._url_check_daily_limit,
                     "url_check_cache_expiry": self._url_check_cache_expiry,
+                    "backup_by_days": self._backup_by_days,
+                    "backup_keep_count": self._backup_keep_count,
+                    "backup_keep_days": self._backup_keep_days,
                 })
 
             if self._scheduler and self._scheduler.get_jobs():
@@ -397,6 +408,108 @@ class StrmLinkChecker(_PluginBase):
                             }
                         ]
                     },
+                    # ===== 备份保留策略 =====
+                    {
+                        'component': 'VRow',
+                        'content': [
+                            {
+                                'component': 'VCol',
+                                'props': {'cols': 12},
+                                'content': [
+                                    {
+                                        'component': 'VCard',
+                                        'props': {'variant': 'outlined'},
+                                        'content': [
+                                            {
+                                                'component': 'VCardTitle',
+                                                'props': {'class': 'pa-3 pb-0'},
+                                                'content': [
+                                                    {
+                                                        'component': 'VAlert',
+                                                        'props': {
+                                                            'type': 'info',
+                                                            'variant': 'tonal',
+                                                            'density': 'compact',
+                                                            'class': 'mb-0',
+                                                            'text': '删除整理记录前会先备份快照到插件数据（deleted_history_backup），便于事后追溯与恢复。两种保留方式二选一。'
+                                                        }
+                                                    }
+                                                ]
+                                            },
+                                            {
+                                                'component': 'VCardText',
+                                                'props': {'class': 'pa-3'},
+                                                'content': [
+                                                    {
+                                                        'component': 'VRow',
+                                                        'props': {'dense': True},
+                                                        'content': [
+                                                            {
+                                                                'component': 'VCol',
+                                                                'props': {'cols': 12, 'md': 4, 'sm': 4},
+                                                                'content': [
+                                                                    {
+                                                                        'component': 'VSwitch',
+                                                                        'props': {
+                                                                            'model': 'backup_by_days',
+                                                                            'label': '按天数保留（关闭则按条数）',
+                                                                            'color': 'primary',
+                                                                            'hideDetails': True,
+                                                                            'density': 'compact'
+                                                                        }
+                                                                    }
+                                                                ]
+                                                            },
+                                                            {
+                                                                'component': 'VCol',
+                                                                'props': {'cols': 12, 'md': 4, 'sm': 4},
+                                                                'content': [
+                                                                    {
+                                                                        'component': 'VTextField',
+                                                                        'props': {
+                                                                            'model': 'backup_keep_count',
+                                                                            'label': '保留条数',
+                                                                            'type': 'number',
+                                                                            'min': 50,
+                                                                            'max': 5000,
+                                                                            'suffix': '条',
+                                                                            'hideDetails': True,
+                                                                            'density': 'compact',
+                                                                            'placeholder': '500'
+                                                                        }
+                                                                    }
+                                                                ]
+                                                            },
+                                                            {
+                                                                'component': 'VCol',
+                                                                'props': {'cols': 12, 'md': 4, 'sm': 4},
+                                                                'content': [
+                                                                    {
+                                                                        'component': 'VTextField',
+                                                                        'props': {
+                                                                            'model': 'backup_keep_days',
+                                                                            'label': '保留天数',
+                                                                            'type': 'number',
+                                                                            'min': 1,
+                                                                            'max': 3650,
+                                                                            'suffix': '天',
+                                                                            'hideDetails': True,
+                                                                            'density': 'compact',
+                                                                            'placeholder': '90'
+                                                                        }
+                                                                    }
+                                                                ]
+                                                            }
+                                                        ]
+                                                    }
+                                                ]
+                                            }
+                                        ]
+                                    }
+                                ]
+                            }
+                        ]
+                    },
                     # ===== Emby 连接 =====
                     {
                         'component': 'VRow',
@@ -642,6 +755,9 @@ class StrmLinkChecker(_PluginBase):
             "url_check_cooldown": 5,
             "url_check_daily_limit": 50,
             "url_check_cache_expiry": 0,
+            "backup_by_days": False,
+            "backup_keep_count": 500,
+            "backup_keep_days": 90,
         }
 
     def get_page(self) -> List[dict]:
@@ -1376,7 +1492,9 @@ class StrmLinkChecker(_PluginBase):
     def __backup_transfer_history(self, transfer_his) -> None:
         """
         删除整理记录前先备份快照，避免误判时溯源信息不可逆丢失
-        备份保存在插件数据 deleted_history_backup，最多保留 500 条
+        备份保存在插件数据 deleted_history_backup，保留策略二选一：
+        - 按条数（默认）：保留最近 backup_keep_count 条
+        - 按天数：保留最近 backup_keep_days 天内的记录（另设 5000 条硬上限防止无限增长）
         """
         try:
             snapshot = {
@@ -1392,8 +1510,21 @@ class StrmLinkChecker(_PluginBase):
             }
             backup = self.get_data('deleted_history_backup') or []
             backup.append(snapshot)
-            if len(backup) > 500:
-                backup = backup[-500:]
+            if self._backup_by_days:
+                keep_days = self._backup_keep_days if self._backup_keep_days > 0 else 90
+                now = datetime.now()
+                kept = []
+                for item in backup:
+                    try:
+                        item_time = datetime.strptime(item.get("deleted_at", ""), "%Y-%m-%d %H:%M:%S")
+                    except (ValueError, TypeError):
+                        item_time = now
+                    if (now - item_time).days < keep_days:
+                        kept.append(item)
+                backup = kept[-5000:]
+            else:
+                keep_count = self._backup_keep_count if self._backup_keep_count > 0 else 500
+                backup = backup[-keep_count:]
             self.save_data('deleted_history_backup', backup)
         except Exception as e:
             logger.error(f"备份整理记录失败: {e}")
@@ -1464,8 +1595,9 @@ class StrmLinkChecker(_PluginBase):
             # 删除整理记录
             if self._delete_history:
                 try:
+                    self.__backup_transfer_history(transfer_his)
                     self._transferhis.delete(transfer_his.id)
-                    logger.info(f"已删除重复入库的整理记录: {transfer_his.id}")
+                    logger.info(f"已删除重复入库的整理记录: {transfer_his.id}（快照已备份）")
                 except Exception as e:
                     logger.error(f"删除整理记录失败: {e}")
 
