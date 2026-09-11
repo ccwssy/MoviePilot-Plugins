@@ -28,7 +28,7 @@ class StrmLinkChecker(_PluginBase):
     plugin_name = "Strm失效清理"
     plugin_desc = "通过转移记录对比Emby媒体库STRM文件与源STRM文件，如果源文件已删除，同步清理Emby条目及附属文件。"
     plugin_icon = "strmcheck.png"
-    plugin_version = "2.3.4"
+    plugin_version = "2.3.5"
     plugin_author = "ccwssy"
     author_url = "https://github.com/ccwssy/MoviePilot-Plugins"
     plugin_config_prefix = "strmlinkchecker_"
@@ -277,30 +277,33 @@ class StrmLinkChecker(_PluginBase):
                 ]
             }
 
-        def toggle_between(model: str, left_text: str, right_text: str):
-            """左右文字 + 中间开关（左为开启态、右为关闭态）"""
+        def backup_option(text: str, model: str, hint: str, suffix: str,
+                          placeholder: str, min_value: int, max_value: int):
+            """备份保留方式：选项标题 + 对应输入框（与开关方向对齐）"""
             return {
-                'component': 'VRow',
-                'props': {'class': 'justify-center align-center mb-3'},
+                'component': 'VCol',
+                'props': {'cols': 12, 'md': 4},
                 'content': [
-                    label_span(left_text),
                     {
-                        'component': 'VCol',
-                        'props': {'cols': 'auto'},
-                        'content': [
-                            {
-                                'component': 'VSwitch',
-                                'props': {
-                                    'model': model,
-                                    'color': 'primary',
-                                    'hideDetails': True,
-                                    'density': 'compact',
-                                    'inset': True
-                                }
-                            }
-                        ]
+                        'component': 'div',
+                        'props': {'class': 'text-body-2 text-center mb-1'},
+                        'text': text
                     },
-                    label_span(right_text)
+                    {
+                        'component': 'VTextField',
+                        'props': {
+                            'model': model,
+                            'variant': 'outlined',
+                            'density': 'compact',
+                            'hideDetails': 'auto',
+                            'type': 'number',
+                            'suffix': suffix,
+                            'placeholder': placeholder,
+                            'min': min_value,
+                            'max': max_value,
+                            'hint': hint
+                        }
+                    }
                 ]
             }
 
@@ -369,22 +372,37 @@ class StrmLinkChecker(_PluginBase):
                                     switch_field('delete_history', '删除整理记录', color='error')
                                 ], margin='mb-2')
                             ]),
-                            # 备份保留策略（整页居中）
+                            # 备份保留策略（整页居中，选项与开关方向一一对应）
                             tab_item('tab_backup', [
                                 tip('删除整理记录前先备份快照到插件数据，便于事后追溯；两种保留方式二选一。'),
-                                toggle_between('backup_by_count', '按天数', '按条数'),
-                                row([
-                                    input_field('backup_keep_count', '保留条数', md=4,
-                                                field_type='number', suffix='条',
-                                                min_value=50, max_value=5000,
-                                                placeholder='500',
-                                                hint='按条数模式生效'),
-                                    input_field('backup_keep_days', '保留天数', md=4,
-                                                field_type='number', suffix='天',
-                                                min_value=1, max_value=3650,
-                                                placeholder='90',
-                                                hint='按天数模式生效，另设 5000 条硬上限')
-                                ], margin='mb-2', center=True)
+                                {
+                                    'component': 'VRow',
+                                    'props': {'class': 'justify-center align-center mb-2'},
+                                    'content': [
+                                        backup_option('按天数', 'backup_keep_days',
+                                                      '开关指向左侧时生效（另设 5000 条硬上限）',
+                                                      '天', '90', 1, 3650),
+                                        {
+                                            'component': 'VCol',
+                                            'props': {'cols': 'auto'},
+                                            'content': [
+                                                {
+                                                    'component': 'VSwitch',
+                                                    'props': {
+                                                        'model': 'backup_by_count',
+                                                        'color': 'primary',
+                                                        'hideDetails': True,
+                                                        'density': 'compact',
+                                                        'inset': True
+                                                    }
+                                                }
+                                            ]
+                                        },
+                                        backup_option('按条数', 'backup_keep_count',
+                                                      '开关指向右侧时生效',
+                                                      '条', '500', 50, 5000)
+                                    ]
+                                }
                             ]),
                             # Emby 连接
                             tab_item('tab_emby', [
