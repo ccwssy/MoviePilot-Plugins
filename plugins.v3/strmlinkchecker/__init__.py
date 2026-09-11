@@ -28,7 +28,7 @@ class StrmLinkChecker(_PluginBase):
     plugin_name = "Strm失效清理"
     plugin_desc = "通过转移记录对比Emby媒体库STRM文件与源STRM文件，如果源文件已删除，同步清理Emby条目及附属文件。"
     plugin_icon = "strmcheck.png"
-    plugin_version = "2.3.3"
+    plugin_version = "2.3.4"
     plugin_author = "ccwssy"
     author_url = "https://github.com/ccwssy/MoviePilot-Plugins"
     plugin_config_prefix = "strmlinkchecker_"
@@ -63,7 +63,7 @@ class StrmLinkChecker(_PluginBase):
     _url_check_round_checked_count = 0
     _url_check_round_total_count = 0
     # 整理记录备份保留策略（二选一：按条数 / 按天数）
-    _backup_by_days = False
+    _backup_by_count = True
     _backup_keep_count = 500
     _backup_keep_days = 90
 
@@ -90,8 +90,11 @@ class StrmLinkChecker(_PluginBase):
             self._url_check_cooldown = int(config.get("url_check_cooldown", 5))
             self._url_check_daily_limit = int(config.get("url_check_daily_limit", 50))
             self._url_check_cache_expiry = int(config.get("url_check_cache_expiry", 0))
-            # 备份保留策略（二选一）
-            self._backup_by_days = config.get("backup_by_days", False)
+            # 备份保留策略（二选一）；兼容旧键 backup_by_days（false 等价于按条数）
+            if "backup_by_count" in config:
+                self._backup_by_count = bool(config.get("backup_by_count", True))
+            elif "backup_by_days" in config:
+                self._backup_by_count = not bool(config.get("backup_by_days", False))
             self._backup_keep_count = int(config.get("backup_keep_count", 500) or 500)
             self._backup_keep_days = int(config.get("backup_keep_days", 90) or 90)
 
@@ -119,7 +122,7 @@ class StrmLinkChecker(_PluginBase):
                     "url_check_cooldown": self._url_check_cooldown,
                     "url_check_daily_limit": self._url_check_daily_limit,
                     "url_check_cache_expiry": self._url_check_cache_expiry,
-                    "backup_by_days": self._backup_by_days,
+                    "backup_by_count": self._backup_by_count,
                     "backup_keep_count": self._backup_keep_count,
                     "backup_keep_days": self._backup_keep_days,
                 })
@@ -184,10 +187,10 @@ class StrmLinkChecker(_PluginBase):
         """
 
         def tip(text: str):
-            """浅色说明文字"""
+            """居中的说明文字"""
             return {
                 'component': 'div',
-                'props': {'class': 'text-caption text-medium-emphasis mb-3'},
+                'props': {'class': 'text-caption text-medium-emphasis mb-3 text-center'},
                 'text': text
             }
 
@@ -252,11 +255,53 @@ class StrmLinkChecker(_PluginBase):
                 ]
             }
 
-        def row(columns: list, margin: str = 'mb-3'):
+        def row(columns: list, margin: str = 'mb-3', center: bool = False):
+            props = {'class': 'justify-center ' + margin if center else margin}
             return {
                 'component': 'VRow',
-                'props': {'class': margin},
+                'props': props,
                 'content': columns
+            }
+
+        def label_span(text: str):
+            """开关两侧的文字标签"""
+            return {
+                'component': 'VCol',
+                'props': {'cols': 'auto'},
+                'content': [
+                    {
+                        'component': 'span',
+                        'props': {'class': 'text-body-2'},
+                        'text': text
+                    }
+                ]
+            }
+
+        def toggle_between(model: str, left_text: str, right_text: str):
+            """左右文字 + 中间开关（左为开启态、右为关闭态）"""
+            return {
+                'component': 'VRow',
+                'props': {'class': 'justify-center align-center mb-3'},
+                'content': [
+                    label_span(left_text),
+                    {
+                        'component': 'VCol',
+                        'props': {'cols': 'auto'},
+                        'content': [
+                            {
+                                'component': 'VSwitch',
+                                'props': {
+                                    'model': model,
+                                    'color': 'primary',
+                                    'hideDetails': True,
+                                    'density': 'compact',
+                                    'inset': True
+                                }
+                            }
+                        ]
+                    },
+                    label_span(right_text)
+                ]
             }
 
         def tab(title: str, value: str):
@@ -324,12 +369,10 @@ class StrmLinkChecker(_PluginBase):
                                     switch_field('delete_history', '删除整理记录', color='error')
                                 ], margin='mb-2')
                             ]),
-                            # 备份保留策略
+                            # 备份保留策略（整页居中）
                             tab_item('tab_backup', [
                                 tip('删除整理记录前先备份快照到插件数据，便于事后追溯；两种保留方式二选一。'),
-                                row([
-                                    switch_field('backup_by_days', '按天数保留（关闭则按条数）')
-                                ], margin='mb-2'),
+                                toggle_between('backup_by_count', '按天数', '按条数'),
                                 row([
                                     input_field('backup_keep_count', '保留条数', md=4,
                                                 field_type='number', suffix='条',
@@ -341,7 +384,7 @@ class StrmLinkChecker(_PluginBase):
                                                 min_value=1, max_value=3650,
                                                 placeholder='90',
                                                 hint='按天数模式生效，另设 5000 条硬上限')
-                                ], margin='mb-2')
+                                ], margin='mb-2', center=True)
                             ]),
                             # Emby 连接
                             tab_item('tab_emby', [
@@ -396,7 +439,7 @@ class StrmLinkChecker(_PluginBase):
             "url_check_cooldown": 5,
             "url_check_daily_limit": 50,
             "url_check_cache_expiry": 0,
-            "backup_by_days": False,
+            "backup_by_count": True,
             "backup_keep_count": 500,
             "backup_keep_days": 90,
         }
@@ -1151,7 +1194,10 @@ class StrmLinkChecker(_PluginBase):
             }
             backup = self.get_data('deleted_history_backup') or []
             backup.append(snapshot)
-            if self._backup_by_days:
+            if self._backup_by_count:
+                keep_count = self._backup_keep_count if self._backup_keep_count > 0 else 500
+                backup = backup[-keep_count:]
+            else:
                 keep_days = self._backup_keep_days if self._backup_keep_days > 0 else 90
                 now = datetime.now()
                 kept = []
@@ -1163,9 +1209,6 @@ class StrmLinkChecker(_PluginBase):
                     if (now - item_time).days < keep_days:
                         kept.append(item)
                 backup = kept[-5000:]
-            else:
-                keep_count = self._backup_keep_count if self._backup_keep_count > 0 else 500
-                backup = backup[-keep_count:]
             self.save_data('deleted_history_backup', backup)
         except Exception as e:
             logger.error(f"备份整理记录失败: {e}")
